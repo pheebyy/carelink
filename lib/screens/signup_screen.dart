@@ -23,10 +23,41 @@ class _SignupScreenState extends State<SignupScreen> {
   String? _errorMessage;
   String? _selectedRole;
 
-  final List<String> _roles = [
-    'I am a Caregiver',
-    'I need a Caregiver',
-  ];
+  bool _showConfirmPassword = false;
+  
+  final List<String> _roles = ['Caregiver', 'Client'];
+
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordController.addListener(_validatePassword);
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  void _validatePassword() {
+    final p = _passwordController.text;
+    int score = 0;
+    if (p.length >= 8) score++;
+    if (RegExp(r'[A-Z]').hasMatch(p)) score++;
+    if (RegExp(r'[0-9]').hasMatch(p)) score++;
+    if (RegExp(r'[!@#\$&*~]').hasMatch(p)) score++;
+
+    if (p.isEmpty) {
+    } else if (score <= 1) {
+    } else if (score == 2) {
+    } else {
+    }
+    setState(() {});
+  }
+
 
   Future<void> _registerUser() async {
     if (!_formKey.currentState!.validate()) return;
@@ -42,6 +73,15 @@ class _SignupScreenState extends State<SignupScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+
+      final roleValue = _selectedRole; // 'caregiver' | 'client'
+      await _firestore.collection('users').doc(userCredential.user!.uid).set({
+        'email': _emailController.text.trim(),
+        'role': roleValue,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'onboarded': false,
+      });
 
       // Save user info in Firestore
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
@@ -72,14 +112,7 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
-    super.dispose();
-  }
-
+ 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -131,6 +164,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     decoration: const InputDecoration(
                       labelText: "Password",
                       border: OutlineInputBorder(),
+                      
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -147,11 +181,16 @@ class _SignupScreenState extends State<SignupScreen> {
                   // Confirm Password
                   TextFormField(
                     controller: _confirmPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
+                    obscureText: !_showConfirmPassword,
+                    decoration: InputDecoration(
                       labelText: "Confirm Password",
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(_showConfirmPassword ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setState(() => _showConfirmPassword = !_showConfirmPassword),
+                      ),
                     ),
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
                     validator: (value) {
                       if (value != _passwordController.text) {
                         return "Passwords do not match";
