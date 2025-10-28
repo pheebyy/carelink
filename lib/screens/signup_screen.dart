@@ -1,7 +1,8 @@
+import 'package:carelink/screens/onboarding_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'login_screen.dart';
+//import 'login_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({Key? key}) : super(key: key);
@@ -95,10 +96,10 @@ class _SignupScreenState extends State<SignupScreen> {
         const SnackBar(content: Text("Account created successfully! Please log in.")),
       );
 
-      // ✅ Navigate to LoginScreen after signup
+      // Navigate to LoginScreen after signup
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
