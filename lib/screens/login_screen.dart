@@ -1,7 +1,7 @@
 import 'package:carelink/screens/caregiverdashboard.dart';
 import 'package:carelink/screens/client_dashboard.dart';
 import 'package:carelink/screens/forgot_password_screen.dart';
-import 'package:carelink/screens/onboarding_screen.dart';
+import 'package:carelink/screens/onboarding_screen.dart' hide SignupScreen;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';

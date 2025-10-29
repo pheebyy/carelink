@@ -3,19 +3,26 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // USERS
+  // ========================= USERS =========================
   Future<void> updateUser(String uid, Map<String, dynamic> data) async {
-    await _db.collection('users').doc(uid).set({
-      ...data,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    try {
+      if (uid.isEmpty) throw Exception("User ID cannot be empty");
+
+      await _db.collection('users').doc(uid).set({
+        ...data,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      print('🔥 Error updating user: $e');
+      rethrow;
+    }
   }
 
   Stream<DocumentSnapshot<Map<String, dynamic>>> userStream(String uid) {
     return _db.collection('users').doc(uid).snapshots();
   }
 
-  // JOBS
+  // ========================= JOBS =========================
   Future<String> createJob({
     required String clientId,
     required String title,
@@ -24,20 +31,27 @@ class FirestoreService {
     String? location,
     num? budget,
   }) async {
-    final ref = await _db.collection('jobs').add({
-      'clientId': clientId,
-      'caregiverId': null,
-      'title': title,
-      'description': description,
-      'careType': careType,
-      'location': location,
-      'budget': budget,
-      'status': 'open',
-      'appliedCaregivers': <String>[],
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    return ref.id;
+    try {
+      if (clientId.isEmpty) throw Exception("Client ID is required");
+
+      final ref = await _db.collection('jobs').add({
+        'clientId': clientId,
+        'caregiverId': null,
+        'title': title,
+        'description': description,
+        'careType': careType,
+        'location': location,
+        'budget': budget,
+        'status': 'open',
+        'appliedCaregivers': <String>[],
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return ref.id;
+    } catch (e) {
+      print('🔥 Error creating job: $e');
+      rethrow;
+    }
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> openJobsStream() {
@@ -57,53 +71,89 @@ class FirestoreService {
   }
 
   Future<void> applyToJob(String jobId, String caregiverId) async {
-    final jobRef = _db.collection('jobs').doc(jobId);
-    await _db.runTransaction((txn) async {
-      final snap = await txn.get(jobRef);
-      if (!snap.exists) {
-        throw Exception('Job not found');
+    try {
+      if (jobId.isEmpty || caregiverId.isEmpty) {
+        throw Exception("Job ID and Caregiver ID cannot be empty");
       }
-      final data = snap.data() as Map<String, dynamic>;
-      final List<dynamic> applied = (data['appliedCaregivers'] as List?) ?? [];
-      if (!applied.contains(caregiverId)) {
-        applied.add(caregiverId);
-        txn.update(jobRef, {
-          'appliedCaregivers': applied,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
-    });
+
+      final jobRef = _db.collection('jobs').doc(jobId);
+
+      await _db.runTransaction((txn) async {
+        final snap = await txn.get(jobRef);
+        if (!snap.exists) throw Exception('Job not found');
+
+        final data = snap.data() ?? {};
+        final List<dynamic> applied = (data['appliedCaregivers'] as List?) ?? [];
+
+        if (!applied.contains(caregiverId)) {
+          applied.add(caregiverId);
+          txn.update(jobRef, {
+            'appliedCaregivers': applied,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      });
+    } catch (e) {
+      print('🔥 Error applying to job: $e');
+      rethrow;
+    }
   }
 
   Future<void> hireCaregiver(String jobId, String caregiverId) async {
-    await _db.collection('jobs').doc(jobId).update({
-      'caregiverId': caregiverId,
-      'status': 'hired',
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      if (jobId.isEmpty || caregiverId.isEmpty) {
+        throw Exception("Job ID and Caregiver ID cannot be empty");
+      }
+
+      await _db.collection('jobs').doc(jobId).update({
+        'caregiverId': caregiverId,
+        'status': 'hired',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('🔥 Error hiring caregiver: $e');
+      rethrow;
+    }
   }
 
+  // ========================= APPLICATIONS =========================
   Future<void> createApplication(String jobId, String caregiverId) async {
-    await _db.collection('jobs').doc(jobId).collection('applications').add({
-      'jobId': jobId,
-      'caregiverId': caregiverId,
-      'status': 'applied',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      await _db.collection('jobs').doc(jobId).collection('applications').add({
+        'jobId': jobId,
+        'caregiverId': caregiverId,
+        'status': 'applied',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('🔥 Error creating application: $e');
+      rethrow;
+    }
   }
 
-  Future<void> updateApplicationStatus(String jobId, String applicationId, String status) async {
-    await _db.collection('jobs').doc(jobId).collection('applications').doc(applicationId).update({
-      'status': status,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+  Future<void> updateApplicationStatus(
+      String jobId, String applicationId, String status) async {
+    try {
+      await _db
+          .collection('jobs')
+          .doc(jobId)
+          .collection('applications')
+          .doc(applicationId)
+          .update({
+        'status': status,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('🔥 Error updating application: $e');
+      rethrow;
+    }
   }
 
   Stream<DocumentSnapshot<Map<String, dynamic>>> jobStream(String jobId) {
     return _db.collection('jobs').doc(jobId).snapshots();
   }
 
-  // MESSAGES under jobs/{jobId}/messages
+  // ========================= MESSAGES =========================
   Stream<QuerySnapshot<Map<String, dynamic>>> messagesStream(String jobId) {
     return _db
         .collection('jobs')
@@ -118,11 +168,18 @@ class FirestoreService {
     required String senderId,
     required String text,
   }) async {
-    await _db.collection('jobs').doc(jobId).collection('messages').add({
-      'senderId': senderId,
-      'text': text,
-      'read': false,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+    try {
+      if (text.trim().isEmpty) throw Exception("Message cannot be empty");
+
+      await _db.collection('jobs').doc(jobId).collection('messages').add({
+        'senderId': senderId,
+        'text': text,
+        'read': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('🔥 Error sending message: $e');
+      rethrow;
+    }
   }
 }

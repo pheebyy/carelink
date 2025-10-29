@@ -2,7 +2,6 @@ import 'package:carelink/screens/onboarding_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-//import 'login_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({Key? key}) : super(key: key);
@@ -27,7 +26,6 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _showConfirmPassword = false;
   
   final List<String> _roles = ['Caregiver', 'Client'];
-
 
   @override
   void initState() {
@@ -59,7 +57,6 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() {});
   }
 
-
   Future<void> _registerUser() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -75,28 +72,29 @@ class _SignupScreenState extends State<SignupScreen> {
         password: _passwordController.text.trim(),
       );
 
-      final roleValue = _selectedRole; // 'caregiver' | 'client'
+      // Save user info in Firestore (single call, removed duplicate)
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'email': _emailController.text.trim(),
-        'role': roleValue,
+        'role': _selectedRole,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'onboarded': false,
       });
 
-      // Save user info in Firestore
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'email': _emailController.text.trim(),
-        'role': _selectedRole,
-        'createdAt': Timestamp.now(),
-      });
+      // Send email verification
+      await userCredential.user!.sendEmailVerification();
 
-      // Notify success
+      if (!mounted) return;
+
+      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Account created successfully! Please log in.")),
+        const SnackBar(
+          content: Text("Account created! Verification email sent. Please check your inbox."),
+          duration: Duration(seconds: 3),
+        ),
       );
 
-      // Navigate to LoginScreen after signup
+      // Navigate to OnboardingScreen
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const OnboardingScreen()),
@@ -104,7 +102,11 @@ class _SignupScreenState extends State<SignupScreen> {
       );
     } on FirebaseAuthException catch (e) {
       setState(() {
-        _errorMessage = e.message;
+        _errorMessage = e.message ?? "An error occurred during signup";
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = "An unexpected error occurred: $e";
       });
     } finally {
       setState(() {
@@ -113,7 +115,6 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
- 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -165,7 +166,6 @@ class _SignupScreenState extends State<SignupScreen> {
                     decoration: const InputDecoration(
                       labelText: "Password",
                       border: OutlineInputBorder(),
-                      
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -249,8 +249,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
 
                   const SizedBox(height: 20),
-
-                   
                 ],
               ),
             ),
