@@ -14,11 +14,13 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   int _currentScreen = 0;
+  final PageController _pageController = PageController();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: PageView(
+        controller: _pageController,
         onPageChanged: (index) {
           setState(() => _currentScreen = index);
         },
@@ -66,8 +68,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   if (_currentScreen > 0)
                     TextButton.icon(
                       onPressed: () {
-                        PageController pageController = PageController();
-                        pageController.previousPage(
+                        _pageController.previousPage(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOut,
                         );
@@ -95,11 +96,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   ElevatedButton.icon(
                     onPressed: () {
-                      PageController pageController = PageController();
-                      pageController.nextPage(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                      );
+                      if (_currentScreen == 2) {
+                        _pageController.nextPage(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      } else {
+                        _pageController.nextPage(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      }
                     },
                     icon: const Icon(Icons.arrow_forward),
                     label: Text(_currentScreen == 2 ? 'Start' : 'Next'),
@@ -248,6 +255,13 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
 
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
+      final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+
+      // Fetch existing user data (to get predefined role)
+      final userSnap = await userRef.get();
+      final existingData = userSnap.data();
+      final role = existingData?['role'];
+
       final lat = double.tryParse(_latCtrl.text.trim());
       final lng = double.tryParse(_lngCtrl.text.trim());
 
@@ -257,7 +271,8 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
         geo = geoPoint.data;
       }
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+      // Update user document with onboarding info without overwriting existing role
+      await userRef.set({
         'name': _nameCtrl.text.trim(),
         'availability': _availabilityCtrl.text.trim(),
         'specializations': _skills.toList(),
@@ -267,18 +282,20 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
       }, SetOptions(merge: true));
 
       if (!mounted) return;
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final role = userDoc.data()?['role'];
 
       if (role == 'caregiver') {
-        Navigator.push(
+        Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) =>  CaregiverDashboard()),
+          MaterialPageRoute(builder: (context) => CaregiverDashboard()),
+        );
+      } else if (role == 'client') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const ClientDashboard()),
         );
       } else {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) =>  ClientDashboard()),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error: Role not found for this user.')),
         );
       }
     } catch (e) {
@@ -307,7 +324,6 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
             key: _formKey,
             child: ListView(
               children: [
-                // Header
                 const SizedBox(height: 24),
                 Column(
                   children: [
@@ -342,7 +358,7 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
                 ),
                 const SizedBox(height: 28),
 
-                // Form Section
+                // Form fields
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -359,7 +375,7 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Name Field
+                      // Name
                       TextFormField(
                         controller: _nameCtrl,
                         decoration: InputDecoration(
@@ -384,7 +400,7 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Availability Field
+                      // Availability
                       TextFormField(
                         controller: _availabilityCtrl,
                         decoration: InputDecoration(
@@ -408,7 +424,7 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Skills Section
+                      // Skills
                       const Text(
                         'Your Skills',
                         style: TextStyle(
@@ -444,7 +460,7 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Location Section
+                      // Location
                       const Text(
                         'Your Location (Optional)',
                         style: TextStyle(
@@ -510,7 +526,7 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Continue Button
+                // Continue button
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -564,4 +580,3 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
     );
   }
 }
-
