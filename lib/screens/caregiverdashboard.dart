@@ -43,8 +43,8 @@ class CaregiverDashboard extends StatelessWidget {
                   onPressed: _uid == null
                       ? null
                       : () async {
-                          await _fs.applyToJob(jobId, _uid!);
-                          await _fs.createApplication(jobId, _uid!);
+                          await _fs.applyToJob(jobId, _uid);
+                          await _fs.createApplication(jobId, _uid);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Applied to job')),
                           );

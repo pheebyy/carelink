@@ -1,3 +1,4 @@
+import 'package:carelink/screens/profile_edit_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
@@ -87,7 +88,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: "Profile",
                     color: Colors.blue.shade100,
                     onTap: () {
-                      // TODO: Navigate to profile page
+                        Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) =>  ProfileEditScreen()),
+              );
                     },
                   ),
                 ],

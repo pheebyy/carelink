@@ -291,7 +291,7 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
       } else if (role == 'client') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const ClientDashboard()),
+          MaterialPageRoute(builder: (context) =>  ClientDashboard()),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(

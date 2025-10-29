@@ -39,6 +39,8 @@ dependencies:
   cloud_firestore: ^6.0.3
   geoflutterfire_plus: ^0.0.33
   google_sign_in: ^6.1.5
+  image_picker: ^1.2.0
+  firebase_storage: ^13.0.3
 
 dev_dependencies:
   flutter_test:
