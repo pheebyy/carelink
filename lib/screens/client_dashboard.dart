@@ -31,7 +31,7 @@ class ClientDashboard extends StatelessWidget {
       body: _uid == null
           ? const Center(child: Text('Please login again'))
           : StreamBuilder(
-              stream: _fs.clientJobsStream(_uid!),
+              stream: _fs.clientJobsStream(_uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());

@@ -15,7 +15,7 @@ class ConversationsInboxScreen extends StatelessWidget {
         .snapshots();
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: stream as Stream<QuerySnapshot<Map<String, dynamic>>>,
+      stream: stream,
       builder: (context, snap) {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final docs = snap.data!.docs;
