@@ -240,6 +240,16 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
   final Set<String> _skills = {};
   bool _saving = false;
 
+  // Role selection for onboarding (reads existing role and allows change)
+  final List<String> _roles = ['caregiver', 'client'];
+  String? _selectedRole;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExistingUserRole();
+  }
+
   @override
   void dispose() {
     _nameCtrl.dispose();
@@ -249,8 +259,33 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
     super.dispose();
   }
 
+  Future<void> _loadExistingUserRole() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final data = doc.data();
+      final role = data?['role'];
+      if (role != null && mounted) {
+        setState(() {
+          _selectedRole = role.toString().toLowerCase();
+        });
+      }
+    } catch (_) {
+      // ignore load errors quietly
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedRole == null || _selectedRole!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a role before continuing.')),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
 
     try {
@@ -271,7 +306,7 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
         geo = geoPoint.data;
       }
 
-      // Update user document with onboarding info without overwriting existing role
+      // Update user document with onboarding info without overwriting existing fields
       await userRef.set({
         'name': _nameCtrl.text.trim(),
         'availability': _availabilityCtrl.text.trim(),
@@ -279,23 +314,26 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
         if (geo != null) 'geo': geo,
         'onboarded': true,
         'updatedAt': FieldValue.serverTimestamp(),
+        // always write role from the onboarding selector (lowercase)
+        'role': _selectedRole!.toLowerCase(),
       }, SetOptions(merge: true));
 
       if (!mounted) return;
 
-      if (role == 'caregiver') {
+      if (_selectedRole == 'caregiver') {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => CaregiverDashboard()),
         );
-      } else if (role == 'client') {
+      } else if (_selectedRole == 'client') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) =>  ClientDashboard()),
+          MaterialPageRoute(builder: (context) => ClientDashboard()),
         );
       } else {
+        // fallback
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error: Role not found for this user.')),
+          const SnackBar(content: Text('Error: Role not recognized.')),
         );
       }
     } catch (e) {
@@ -358,7 +396,7 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
                 ),
                 const SizedBox(height: 28),
 
-                // Form fields
+                // Form container
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -375,6 +413,32 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Role selector (important)
+                      const Text(
+                        'Select your role',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: _selectedRole,
+                        items: _roles
+                            .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                            .toList(),
+                        onChanged: (v) => setState(() => _selectedRole = v),
+                        validator: (v) => v == null || v.isEmpty ? 'Please select a role' : null,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.person, color: Colors.green),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
                       // Name
                       TextFormField(
                         controller: _nameCtrl,
