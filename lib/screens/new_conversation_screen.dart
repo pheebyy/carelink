@@ -1,17 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../Models/usermodel.dart';
 import 'conversations_chat_screen.dart';
-import 'new_conversation_screen.dart';
 
-class ConversationsInboxScreen extends StatefulWidget {
-  const ConversationsInboxScreen({super.key});
+class NewConversationScreen extends StatefulWidget {
+  const NewConversationScreen({super.key});
 
   @override
-  State<ConversationsInboxScreen> createState() => _ConversationsInboxScreenState();
+  State<NewConversationScreen> createState() => _NewConversationScreenState();
 }
 
-class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
+class _NewConversationScreenState extends State<NewConversationScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -21,16 +21,65 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
     super.dispose();
   }
 
+  Future<void> _startConversation(AppUser recipient) async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final currentUser = FirebaseAuth.instance.currentUser!;
+
+    // Check if conversation already exists
+    final existing = await FirebaseFirestore.instance
+        .collection('conversations')
+        .where('participantIds',
+            arrayContains: uid)
+        .get();
+
+    String? conversationId;
+    for (final doc in existing.docs) {
+      final participants = List<String>.from(doc['participantIds'] ?? []);
+      if (participants.contains(recipient.uid) && participants.length == 2) {
+        conversationId = doc.id;
+        break;
+      }
+    }
+
+    // Create new conversation if it doesn't exist
+    if (conversationId == null) {
+      final docRef =
+          await FirebaseFirestore.instance.collection('conversations').add({
+        'participantIds': [uid, recipient.uid],
+        'participantNames': [
+          currentUser.displayName ?? 'User',
+          recipient.name ?? 'User'
+        ],
+        'lastMessage': '',
+        'lastMessageTime': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+        'title': recipient.name ?? 'Chat',
+        'unreadCount': {
+          uid: 0,
+          recipient.uid: 0,
+        },
+      });
+      conversationId = docRef.id;
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ConversationChatScreen(
+            conversationId: conversationId!,
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final displayName = FirebaseAuth.instance.currentUser?.displayName ?? 'User';
-    
-    final stream = FirebaseFirestore.instance
-        .collection('conversations')
-        .where('participantIds', arrayContains: uid)
-        .orderBy('lastMessageTime', descending: true)
-        .snapshots();
+
+    final stream = FirebaseFirestore.instance.collection('users').snapshots();
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -41,40 +90,15 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
           icon: Icon(Icons.arrow_back, color: Colors.grey.shade800),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Messages',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade800,
-              ),
-            ),
-            Text(
-              displayName,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-              ),
-            ),
-          ],
+        title: Text(
+          'New Message',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade800,
+          ),
         ),
         centerTitle: false,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.add_comment_outlined, color: Colors.grey.shade800),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const NewConversationScreen(),
-                ),
-              );
-            },
-          ),
-        ],
       ),
       body: Column(
         children: [
@@ -87,7 +111,7 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
                 setState(() => _searchQuery = value.toLowerCase());
               },
               decoration: InputDecoration(
-                hintText: 'Search conversations...',
+                hintText: 'Search by name or email...',
                 hintStyle: TextStyle(color: Colors.grey.shade500),
                 prefixIcon: Icon(Icons.search, color: Colors.grey.shade600),
                 suffixIcon: _searchQuery.isNotEmpty
@@ -107,12 +131,13 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
             ),
           ),
 
-          // Conversations list
+          // Users list
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: stream,
@@ -123,13 +148,18 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
                   );
                 }
 
-                var docs = snap.data!.docs;
-                
+                var docs = snap.data!.docs
+                    .where((doc) => doc.id != uid) // Exclude current user
+                    .toList();
+
                 // Filter by search query
                 if (_searchQuery.isNotEmpty) {
                   docs = docs.where((doc) {
-                    final title = (doc['title'] ?? '').toString().toLowerCase();
-                    return title.contains(_searchQuery);
+                    final data = doc.data();
+                    final name = (data['name'] ?? '').toString().toLowerCase();
+                    final email = (data['email'] ?? '').toString().toLowerCase();
+                    return name.contains(_searchQuery) ||
+                        email.contains(_searchQuery);
                   }).toList();
                 }
 
@@ -138,10 +168,13 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.mail_outline, size: 64, color: Colors.grey.shade400),
+                        Icon(Icons.people_outline,
+                            size: 64, color: Colors.grey.shade400),
                         const SizedBox(height: 16),
                         Text(
-                          _searchQuery.isEmpty ? 'No conversations yet' : 'No conversations found',
+                          _searchQuery.isEmpty
+                              ? 'No users available'
+                              : 'No users found',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey.shade600,
@@ -158,27 +191,11 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
                   itemCount: docs.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
-                    final d = docs[index].data();
-                    final conversationId = docs[index].id;
-                    final unread = (d['unreadCount']?[uid] ?? 0) as int;
-                    final lastMessage = d['lastMessage'] ?? 'No messages yet';
-                    final lastMessageTime = d['lastMessageTime'] as Timestamp?;
-                    final participantNames = d['participantNames'] as List<dynamic>? ?? [];
-                    final title = participantNames.isNotEmpty
-                        ? participantNames.join(', ')
-                        : d['title'] ?? 'Chat';
+                    final data = docs[index].data();
+                    final user = AppUser.fromMap(docs[index].id, data);
 
                     return InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ConversationChatScreen(
-                              conversationId: conversationId,
-                            ),
-                          ),
-                        );
-                      },
+                      onTap: () => _startConversation(user),
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         padding: const EdgeInsets.all(12),
@@ -204,87 +221,82 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
                                 color: Colors.green.shade100,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Icon(
-                                Icons.people,
-                                color: Colors.green.shade600,
-                                size: 28,
-                              ),
+                              child: user.profilePhotoUrl != null
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.network(
+                                        user.profilePhotoUrl!,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.person,
+                                      color: Colors.green.shade600,
+                                      size: 28,
+                                    ),
                             ),
                             const SizedBox(width: 12),
-                            // Message content
+                            // User info
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          title.toString(),
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.black87,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      Text(
-                                        _formatTime(lastMessageTime),
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
-                                    ],
+                                  Text(
+                                    user.name ?? 'User',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 4),
                                   Row(
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          lastMessage,
+                                          user.email,
                                           style: TextStyle(
-                                            fontSize: 13,
-                                            color: unread > 0
-                                                ? Colors.black87
-                                                : Colors.grey.shade600,
-                                            fontWeight: unread > 0
-                                                ? FontWeight.w500
-                                                : FontWeight.normal,
+                                            fontSize: 12,
+                                            color: Colors.grey.shade600,
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                      if (unread > 0) ...[
-                                        const SizedBox(width: 8),
+                                      const SizedBox(width: 8),
+                                      if (user.role.isNotEmpty)
                                         Container(
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 4,
+                                            horizontal: 8,
+                                            vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.green,
-                                            borderRadius: BorderRadius.circular(10),
+                                            color: user.role == 'caregiver'
+                                                ? Colors.blue.shade100
+                                                : Colors.orange.shade100,
+                                            borderRadius:
+                                                BorderRadius.circular(6),
                                           ),
                                           child: Text(
-                                            '$unread',
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              color: Colors.white,
+                                            user.role,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: user.role == 'caregiver'
+                                                  ? Colors.blue.shade700
+                                                  : Colors.orange.shade700,
                                             ),
                                           ),
                                         ),
-                                      ],
                                     ],
                                   ),
                                 ],
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            Icon(Icons.chevron_right, color: Colors.grey.shade400),
                           ],
                         ),
                       ),
@@ -298,27 +310,4 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
       ),
     );
   }
-
-  String _formatTime(Timestamp? timestamp) {
-    if (timestamp == null) return '';
-    
-    final dateTime = timestamp.toDate();
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return 'now';
-    } else if (difference.inHours < 1) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inDays < 1) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inDays == 1) {
-      return 'yesterday';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    } else {
-      return '${dateTime.day}/${dateTime.month}';
-    }
-  }
 }
-
