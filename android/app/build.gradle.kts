@@ -49,4 +49,6 @@ dependencies {
 
     // Optional Kotlin standard library (helps with Java 11 compatibility)
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+    implementation("androidx.appcompat:appcompat:1.4.0")
 }
+

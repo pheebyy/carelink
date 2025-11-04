@@ -2,70 +2,93 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 
 class AiService {
   late final GenerativeModel _model;
-  final List<Content> _chatHistory = [];
-  
-  AiService({required String apiKey}) {
-    // Using gemini-pro - the stable, widely-supported model
-    _model = GenerativeModel(
-      model: 'gemini-pro',
-      apiKey: apiKey,
-    );
-    _initializeChat();
+  late final ChatSession _chat;
+  final bool _isInitialized;
+
+  AiService({required String apiKey})
+      : _isInitialized = apiKey.isNotEmpty &&
+            !apiKey.contains('YOUR_GEMINI') {
+    if (_isInitialized) {
+      _model = GenerativeModel(
+        model: 'gemini-2.0-flash',
+        apiKey: apiKey,
+      );
+      _initializeChat();
+    }
   }
 
   void _initializeChat() {
-    _chatHistory.clear();
-    _chatHistory.add(
-      Content.model([
-        TextPart(
-          '''You are CareLink Assistant, a helpful AI assistant for a healthcare 
-          caregiving platform. You help users with:
-          - Scheduling and managing care visits
-          - Information about available caregivers
-          - Payment and billing questions
-          - General health and wellness advice
-          - Appointment reminders and updates
-          
-          Be professional, empathetic, and concise. If you don't know something, 
-          suggest contacting support.''',
+    _chat = _model.startChat(
+      history: [
+        Content.text(
+          '''You are CareLink Assistant, a helpful and empathetic AI assistant 
+for a healthcare caregiving platform.
+
+Your responsibilities:
+- Help users schedule and manage care visits
+- Answer questions about available caregivers and their qualifications
+- Provide information about payments, billing, and invoices
+- Offer general health and wellness advice for elderly care
+- Send appointment reminders and updates
+- Answer FAQs about the platform
+- Provide emotional support to family members managing care
+
+Guidelines:
+- Be professional, warm, and empathetic
+- Keep responses concise and clear (2-3 sentences max)
+- When discussing health matters, always recommend consulting a healthcare provider for serious concerns
+- If you don't know something specific about the user's account, suggest contacting support
+- Never provide medical diagnoses - only general wellness information
+- Personalize responses when possible
+- Be supportive and understanding of caregiving challenges
+
+Available Features to mention:
+- View upcoming visits and reschedule them
+- Message caregivers
+- Track and manage payments
+- Update profile information
+- Request emergency support
+- Access care plans and health records''',
         ),
-      ]),
+      ],
     );
   }
 
+  bool get isInitialized => _isInitialized;
+
   Future<String> chat(String userMessage) async {
+    if (!_isInitialized) {
+      return 'AI Assistant is not configured. Please add your Gemini API key in lib/config/api_config.dart';
+    }
+
     try {
-      // Add user message to history
-      _chatHistory.add(Content.text(userMessage));
-      
-      // Generate response
-      final response = await _model.generateContent(_chatHistory);
-      final responseText = response.text ?? 'Unable to process your message';
-      
-      // Add AI response to history
-      _chatHistory.add(Content.model([TextPart(responseText)]));
-      
-      return responseText;
-    } catch (e) {
-      // Print detailed error for debugging
-      print('❌ AI Service Error: $e');
-      
-      // Return user-friendly error message with hint
-      if (e.toString().contains('API key')) {
-        return 'API key error. Please generate a new API key from Google AI Studio.';
-      } else if (e.toString().contains('quota') || e.toString().contains('limit')) {
-        return 'API quota exceeded. Please try again later or check your billing.';
-      } else if (e.toString().contains('network') || e.toString().contains('connection')) {
-        return 'Network error. Please check your internet connection.';
-      } else if (e.toString().contains('not found') || e.toString().contains('not supported')) {
-        return 'Model not available. Your API key might need to be regenerated from https://aistudio.google.com/app/apikey';
+      if (userMessage.trim().isEmpty) {
+        return 'Please type a message';
       }
-      
-      return 'Error: ${e.toString().split('\n').first}';
+
+      final response = await _chat.sendMessage(
+        Content.text(userMessage),
+      );
+
+      return response.text ??
+          'Unable to process your message. Please try again.';
+    } on GenerativeAIException catch (e) {
+      print('🔥 Generative AI Error: ${e.message}');
+      if (e.message.contains('API_KEY_INVALID')) {
+        return 'Invalid API key. Please check your configuration.';
+      } else if (e.message.contains('RESOURCE_EXHAUSTED')) {
+        return 'I\'m currently busy. Please try again in a moment.';
+      }
+      return 'I encountered an error: ${e.message}. Please try again.';
+    } catch (e) {
+      print('🔥 AI Chat Error: $e');
+      return 'Sorry, I encountered an unexpected error. Please try again or contact support.';
     }
   }
 
   void resetChat() {
-    _initializeChat();
+    if (_isInitialized) {
+      _initializeChat();
+    }
   }
 }

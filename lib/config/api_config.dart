@@ -1,17 +1,11 @@
-/// API Configuration
-/// 
-/// IMPORTANT: Get your own Google AI API key from:
-/// https://makersuite.google.com/app/apikey
-/// 
-/// Then replace 'YOUR_GOOGLE_AI_API_KEY_HERE' with your actual key.
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-class ApiConfig {
-  // Google Gemini AI API Key
-  // TODO: Replace with your actual API key from Google AI Studio
-  static const String geminiApiKey = 'AIzaSyBSLDSeSRlHvet3NOsz2xODmvxzayzCMYA';
-  
-  /// Check if API key is configured
-  static bool get isConfigured => 
-      geminiApiKey != '' && 
-      geminiApiKey.isNotEmpty;
-}
+   class ApiConfig {
+     static String get geminiApiKey {
+       return dotenv.env['GEMINI_API_KEY'] ?? '';
+     }
+     
+     static bool get isConfigured {
+       return geminiApiKey.isNotEmpty;
+     }
+   }

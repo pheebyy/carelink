@@ -47,6 +47,9 @@ dependencies:
   go_router: ^16.3.0
   google_generative_ai: ^0.4.7
   firebase_ai: ^3.4.0
+  flutter_launcher_icons: ^0.14.4
+  dotenv: ^4.2.0
+  flutter_dotenv: ^6.0.0
 
 dev_dependencies:
   flutter_test:
@@ -58,7 +61,11 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
-
+flutter_icons:
+  android: true
+  ios: true
+  web: true
+  image_path: "assets/logo.png"
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
@@ -72,6 +79,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - .env
     - assets/logo.png
     - assets/Help.jpg
     - assets/Patient.jpg

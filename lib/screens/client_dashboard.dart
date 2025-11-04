@@ -3,6 +3,8 @@ import 'package:carelink/screens/ai_assistant_screen.dart';
 import 'package:carelink/screens/conversations_chat_screen.dart';
 import 'package:carelink/screens/conversations_inbox_screen.dart';
 import 'package:carelink/screens/visits_screen.dart';
+import 'package:carelink/screens/search_caregivers_screen.dart';
+import 'package:carelink/screens/post_job_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -240,6 +242,62 @@ class _ClientDashboardState extends State<ClientDashboard> {
                             ],
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // New Action Buttons - Search Caregivers & Post Job
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const SearchCaregiversScreen(),
+                                  ),
+                                ).then((_) {
+                                  setState(() => _currentNavIndex = 0);
+                                });
+                              },
+                              icon: const Icon(Icons.search),
+                              label: const Text('Find Caregivers'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const PostJobScreen(),
+                                  ),
+                                ).then((_) {
+                                  setState(() => _currentNavIndex = 0);
+                                });
+                              },
+                              icon: const Icon(Icons.add_circle),
+                              label: const Text('Post a Job'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 24),
 
