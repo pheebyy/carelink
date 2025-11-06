@@ -2,7 +2,7 @@
 
 A comprehensive Flutter-based healthcare management platform connecting clients with professional caregivers. CareLink streamlines the process of finding, hiring, and managing healthcare services with features for job posting, bidding, care planning, and real-time communication.
 
-## 📱 Features
+##  Features
 
 ### For Clients
 - **Dashboard Overview**: View visits, payments, and care statistics at a glance
@@ -37,7 +37,7 @@ A comprehensive Flutter-based healthcare management platform connecting clients 
 - 🌓 **Responsive Design**: Optimized for all screen sizes
 - 🔄 **Offline Support**: Continue working with limited connectivity
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 ### Frontend
 - **Flutter**: Cross-platform mobile framework
@@ -258,7 +258,7 @@ theme: ThemeData(
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 👥 Authors
+##  Authors
 
 - **Pheeby** - *Initial work* - [pheebyy](https://github.com/pheebyy)
 
@@ -268,12 +268,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Firebase for backend services
 - Material Design for UI/UX guidelines
 - Paystack for payment processing
-- Brainwave WISTEM project
+- Brainwave team WISTEM project for being supportive
 
 
 
 
-## 📊 App Statistics
+##  App Statistics
 
 - **Screens**: 20+ screens
 - **Collections**: 5 main Firestore collections
