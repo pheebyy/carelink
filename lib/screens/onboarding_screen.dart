@@ -14,121 +14,140 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   int _currentScreen = 0;
-  final PageController _pageController = PageController();
+  late PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: PageView(
         controller: _pageController,
-        onPageChanged: (index) {
-          setState(() => _currentScreen = index);
-        },
-        children: [
-          _buildIntroScreen(
-            0,
-            'assets/Help.jpg',
-            'Welcome to CareCare',
-            'Connecting caregivers with families in need of support and compassion.',
-            Colors.blue,
+        onPageChanged: (index) => setState(() => _currentScreen = index),
+        children: const [
+          _IntroScreen(
+            index: 0,
+            imagePath: 'assets/Help.jpg',
+            title: 'Welcome to CareCare',
+            description:
+                'Connecting caregivers with families in need of support and compassion.',
+            accentColor: Colors.blue,
           ),
-          _buildIntroScreen(
-            1,
-            'assets/Patient.jpg',
-            'Quality Care',
-            'Find trusted caregivers or clients matched to your skills and availability.',
-            Colors.purple,
+          _IntroScreen(
+            index: 1,
+            imagePath: 'assets/Patient.jpg',
+            title: 'Quality Care',
+            description:
+                'Find trusted caregivers or clients matched to your skills and availability.',
+            accentColor: Colors.purple,
           ),
-          _buildIntroScreen(
-            2,
-            'assets/disabled children.jpg',
-            'Make a Difference',
-            'Build meaningful connections and provide exceptional care services.',
-            Colors.orange,
+          _IntroScreen(
+            index: 2,
+            imagePath: 'assets/disabled children.jpg',
+            title: 'Make a Difference',
+            description:
+                'Build meaningful connections and provide exceptional care services.',
+            accentColor: Colors.orange,
           ),
-          const OnboardingFormScreen(),
+          OnboardingFormScreen(),
         ],
       ),
-      bottomSheet: _currentScreen < 3
-          ? Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, -5),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  if (_currentScreen > 0)
-                    TextButton.icon(
-                      onPressed: () {
-                        _pageController.previousPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                      icon: const Icon(Icons.arrow_back),
-                      label: const Text('Back'),
-                    )
-                  else
-                    const SizedBox(width: 80),
-                  Row(
-                    children: List.generate(
-                      4,
-                      (index) => Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: index == _currentScreen
-                              ? Colors.green
-                              : Colors.grey.shade300,
-                        ),
-                      ),
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      if (_currentScreen == 2) {
-                        _pageController.nextPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      } else {
-                        _pageController.nextPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.arrow_forward),
-                    label: Text(_currentScreen == 2 ? 'Start' : 'Next'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : null,
+      bottomSheet: _currentScreen < 3 ? _buildBottomNav() : null,
     );
   }
 
-  Widget _buildIntroScreen(
-    int index,
-    String imagePath,
-    String title,
-    String description,
-    Color accentColor,
-  ) {
+  Widget _buildBottomNav() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          if (_currentScreen > 0)
+            TextButton.icon(
+              onPressed: () => _pageController.previousPage(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              ),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Back'),
+            )
+          else
+            const SizedBox(width: 80),
+          _buildPageIndicator(),
+          ElevatedButton.icon(
+            onPressed: () => _pageController.nextPage(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.arrow_forward),
+            label: Text(_currentScreen == 2 ? 'Start' : 'Next'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPageIndicator() {
+    return Row(
+      children: List.generate(
+        4,
+        (index) => Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: index == _currentScreen
+                ? Colors.green
+                : Colors.grey.shade300,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IntroScreen extends StatelessWidget {
+  final int index;
+  final String imagePath;
+  final String title;
+  final String description;
+  final Color accentColor;
+
+  const _IntroScreen({
+    required this.index,
+    required this.imagePath,
+    required this.title,
+    required this.description,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -143,7 +162,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Expanded(
               flex: 2,
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(16),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
                   child: Image.asset(
@@ -156,7 +175,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -167,7 +186,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         color: accentColor.withOpacity(0.2),
                       ),
                       child: Icon(
-                        _getIconForScreen(index),
+                        _getIconForScreen(),
                         size: 32,
                         color: accentColor,
                       ),
@@ -202,7 +221,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  IconData _getIconForScreen(int index) {
+  IconData _getIconForScreen() {
     switch (index) {
       case 0:
         return Icons.handshake;
@@ -224,12 +243,13 @@ class OnboardingFormScreen extends StatefulWidget {
 }
 
 class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
-  final _latCtrl = TextEditingController();
-  final _lngCtrl = TextEditingController();
-  final _availabilityCtrl = TextEditingController();
-  final List<String> _allSkills = const [
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  late TextEditingController _nameCtrl;
+  late TextEditingController _latCtrl;
+  late TextEditingController _lngCtrl;
+  late TextEditingController _availabilityCtrl;
+
+  static const List<String> _allSkills = [
     'elderly care',
     'disability support',
     'child care',
@@ -237,16 +257,19 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
     'overnight',
     'cooking'
   ];
-  final Set<String> _skills = {};
-  bool _saving = false;
+  static const List<String> _roles = ['caregiver', 'client'];
 
-  // Role selection for onboarding (reads existing role and allows change)
-  final List<String> _roles = ['caregiver', 'client'];
+  final Set<String> _selectedSkills = {};
   String? _selectedRole;
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
+    _nameCtrl = TextEditingController();
+    _latCtrl = TextEditingController();
+    _lngCtrl = TextEditingController();
+    _availabilityCtrl = TextEditingController();
     _loadExistingUserRole();
   }
 
@@ -263,16 +286,16 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
-      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final data = doc.data();
-      final role = data?['role'];
+
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final role = doc.data()?['role']?.toString().toLowerCase();
+
       if (role != null && mounted) {
-        setState(() {
-          _selectedRole = role.toString().toLowerCase();
-        });
+        setState(() => _selectedRole = role);
       }
-    } catch (_) {
-      // ignore load errors quietly
+    } catch (e) {
+      debugPrint('Error loading user role: $e');
     }
   }
 
@@ -280,69 +303,71 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedRole == null || _selectedRole!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a role before continuing.')),
-      );
+      _showSnackBar('Please select a role before continuing.');
       return;
     }
 
-    setState(() => _saving = true);
+    setState(() => _isSaving = true);
 
     try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw Exception('User not authenticated');
+
       final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
 
-      // Fetch existing user data (to get predefined role)
-      final userSnap = await userRef.get();
-      final existingData = userSnap.data();
-      final role = existingData?['role'];
-
+      // Parse location data if provided
+      Map<String, dynamic>? geoData;
       final lat = double.tryParse(_latCtrl.text.trim());
       final lng = double.tryParse(_lngCtrl.text.trim());
 
-      Map<String, dynamic>? geo;
       if (lat != null && lng != null) {
         final geoPoint = GeoFirePoint(GeoPoint(lat, lng));
-        geo = geoPoint.data;
+        geoData = geoPoint.data;
       }
 
-      // Update user document with onboarding info without overwriting existing fields
+      // Update user profile
       await userRef.set({
         'name': _nameCtrl.text.trim(),
+        'role': _selectedRole!.toLowerCase(),
         'availability': _availabilityCtrl.text.trim(),
-        'specializations': _skills.toList(),
-        if (geo != null) 'geo': geo,
+        'specializations': _selectedSkills.toList(),
+        if (geoData != null) 'geo': geoData,
         'onboarded': true,
         'updatedAt': FieldValue.serverTimestamp(),
-        // always write role from the onboarding selector (lowercase)
-        'role': _selectedRole!.toLowerCase(),
       }, SetOptions(merge: true));
 
       if (!mounted) return;
 
-      if (_selectedRole == 'caregiver') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => CaregiverDashboard()),
-        );
-      } else if (_selectedRole == 'client') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => ClientDashboard()),
-        );
-      } else {
-        // fallback
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error: Role not recognized.')),
-        );
-      }
+      // Navigate to appropriate dashboard
+      _navigateToDashboard();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      _showSnackBar('Error: $e', isError: true);
+      debugPrint('Save error: $e');
     } finally {
-      setState(() => _saving = false);
+      if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  void _navigateToDashboard() {
+    final destination = _selectedRole == 'caregiver'
+        ? const CaregiverDashboard()
+        : const ClientDashboard();
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => destination),
+    );
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override
@@ -357,290 +382,304 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Form(
             key: _formKey,
             child: ListView(
+              padding: const EdgeInsets.only(bottom: 24),
               children: [
                 const SizedBox(height: 24),
-                Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [Colors.green.shade400, Colors.green.shade600],
-                        ),
-                      ),
-                      child: const Icon(Icons.person_add, size: 40, color: Colors.white),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Complete Your Profile',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Help us get to know you better',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
+                _buildHeader(),
                 const SizedBox(height: 28),
-
-                // Form container
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        blurRadius: 10,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Role selector (important)
-                      const Text(
-                        'Select your role',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: _selectedRole,
-                        items: _roles
-                            .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                            .toList(),
-                        onChanged: (v) => setState(() => _selectedRole = v),
-                        validator: (v) => v == null || v.isEmpty ? 'Please select a role' : null,
-                        decoration: InputDecoration(
-                          prefixIcon: const Icon(Icons.person, color: Colors.green),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.grey.shade300)),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Name
-                      TextFormField(
-                        controller: _nameCtrl,
-                        decoration: InputDecoration(
-                          labelText: 'Full Name',
-                          hintText: 'Enter your full name',
-                          prefixIcon: const Icon(Icons.person, color: Colors.green),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Colors.green, width: 2),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        validator: (v) => v == null || v.isEmpty ? 'Name is required' : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Availability
-                      TextFormField(
-                        controller: _availabilityCtrl,
-                        decoration: InputDecoration(
-                          labelText: 'Availability',
-                          hintText: 'e.g., Weekdays 9 AM - 5 PM',
-                          prefixIcon: const Icon(Icons.access_time, color: Colors.green),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Colors.green, width: 2),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Skills
-                      const Text(
-                        'Your Skills',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: _allSkills.map((s) {
-                          final selected = _skills.contains(s);
-                          return FilterChip(
-                            label: Text(s),
-                            selected: selected,
-                            backgroundColor: Colors.grey.shade100,
-                            selectedColor: Colors.green.shade100,
-                            side: BorderSide(
-                              color: selected ? Colors.green : Colors.grey.shade300,
-                              width: 2,
-                            ),
-                            labelStyle: TextStyle(
-                              color: selected ? Colors.green.shade700 : Colors.grey.shade700,
-                              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                            onSelected: (v) {
-                              setState(() => v ? _skills.add(s) : _skills.remove(s));
-                            },
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Location
-                      const Text(
-                        'Your Location (Optional)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: _latCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: InputDecoration(
-                                labelText: 'Latitude',
-                                prefixIcon: const Icon(Icons.location_on, color: Colors.green),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Colors.green, width: 2),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextFormField(
-                              controller: _lngCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: InputDecoration(
-                                labelText: 'Longitude',
-                                prefixIcon: const Icon(Icons.location_on, color: Colors.green),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Colors.green, width: 2),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                _buildFormContainer(),
                 const SizedBox(height: 24),
-
-                // Continue button
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.green.shade500, Colors.green.shade700],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.green.withOpacity(0.3),
-                        blurRadius: 12,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: ElevatedButton(
-                    onPressed: _saving ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 56),
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _saving
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Complete Setup',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 60),
+                _buildSubmitButton(),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: [Colors.green.shade400, Colors.green.shade600],
+            ),
+          ),
+          child: const Icon(Icons.person_add, size: 40, color: Colors.white),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Complete Your Profile',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Help us get to know you better',
+          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFormContainer() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildRoleSelector(),
+          const SizedBox(height: 16),
+          _buildNameField(),
+          const SizedBox(height: 16),
+          _buildAvailabilityField(),
+          const SizedBox(height: 20),
+          _buildSkillsSection(),
+          const SizedBox(height: 20),
+          _buildLocationSection(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoleSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Select your role',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _selectedRole,
+          items: _roles
+              .map((r) => DropdownMenuItem(
+                    value: r,
+                    child: Text(r.replaceFirst(r[0], r[0].toUpperCase())),
+                  ))
+              .toList(),
+          onChanged: (v) => setState(() => _selectedRole = v),
+          validator: (v) =>
+              v == null || v.isEmpty ? 'Please select a role' : null,
+          decoration: _inputDecoration(
+            label: 'Role',
+            icon: Icons.person,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNameField() {
+    return TextFormField(
+      controller: _nameCtrl,
+      keyboardType: TextInputType.name,
+      textInputAction: TextInputAction.next,
+      decoration: _inputDecoration(
+        label: 'Full Name',
+        hint: 'Enter your full name',
+        icon: Icons.person,
+      ),
+      validator: (v) => v == null || v.trim().isEmpty ? 'Name is required' : null,
+    );
+  }
+
+  Widget _buildAvailabilityField() {
+    return TextFormField(
+      controller: _availabilityCtrl,
+      keyboardType: TextInputType.text,
+      textInputAction: TextInputAction.next,
+      decoration: _inputDecoration(
+        label: 'Availability',
+        hint: 'e.g., Weekdays 9 AM - 5 PM',
+        icon: Icons.access_time,
+      ),
+    );
+  }
+
+  Widget _buildSkillsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Your Skills',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: _allSkills.map((skill) {
+            final isSelected = _selectedSkills.contains(skill);
+            return FilterChip(
+              label: Text(skill),
+              selected: isSelected,
+              backgroundColor: Colors.grey.shade100,
+              selectedColor: Colors.green.shade100,
+              side: BorderSide(
+                color: isSelected ? Colors.green : Colors.grey.shade300,
+                width: 2,
+              ),
+              labelStyle: TextStyle(
+                color: isSelected ? Colors.green.shade700 : Colors.grey.shade700,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+              onSelected: (selected) {
+                setState(() {
+                  selected
+                      ? _selectedSkills.add(skill)
+                      : _selectedSkills.remove(skill);
+                });
+              },
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLocationSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Your Location (Optional)',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _latCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                textInputAction: TextInputAction.next,
+                decoration: _inputDecoration(
+                  label: 'Latitude',
+                  icon: Icons.location_on,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: _lngCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                textInputAction: TextInputAction.done,
+                decoration: _inputDecoration(
+                  label: 'Longitude',
+                  icon: Icons.location_on,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.green.shade500, Colors.green.shade700],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withOpacity(0.3),
+            blurRadius: 12,
+            spreadRadius: 2,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: _isSaving ? null : _save,
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(double.infinity, 56),
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: _isSaving
+            ? const SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Text(
+                'Complete Setup',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration({
+    required String label,
+    String? hint,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: Icon(icon, color: Colors.green),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.green, width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(vertical: 14),
     );
   }
 }

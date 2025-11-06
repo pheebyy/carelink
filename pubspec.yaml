@@ -50,6 +50,7 @@ dependencies:
   flutter_launcher_icons: ^0.14.4
   dotenv: ^4.2.0
   flutter_dotenv: ^6.0.0
+  paystack_payment: ^1.0.0
 
 dev_dependencies:
   flutter_test:
@@ -61,6 +62,17 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  flutter_native_splash: ^2.3.7
+
+flutter_native_splash:
+  color: "#EEF7EE"
+  image: assets/logo.png
+  android: true
+  ios: true
+  fullscreen: true
+  android_gravity: center
+  ios_content_mode: scaleAspectFit
+
 flutter_icons:
   android: true
   ios: true
@@ -84,6 +96,7 @@ flutter:
     - assets/Help.jpg
     - assets/Patient.jpg
     - assets/disabled children.jpg
+    - assets/google.svg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

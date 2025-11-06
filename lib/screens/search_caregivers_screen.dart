@@ -268,7 +268,7 @@ class _SearchCaregiversScreenState extends State<SearchCaregiversScreen> {
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -322,7 +322,7 @@ class _SearchCaregiversScreenState extends State<SearchCaregiversScreen> {
                           Icon(Icons.star, size: 14, color: Colors.amber),
                           const SizedBox(width: 4),
                           Text(
-                            '${caregiver.rating!.toStringAsFixed(1)}',
+                            caregiver.rating!.toStringAsFixed(1),
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,

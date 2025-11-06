@@ -182,10 +182,80 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                       onPressed: _save,
                       style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 48), backgroundColor: Colors.green),
                       child: const Text('Save Profile'),
-                    )
+                    ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: _logout,
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Logout'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              )
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _logout() async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout from your account?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+
+              try {
+                setState(() => _loading = true);
+
+                // Sign out from Firebase
+                await FirebaseAuth.instance.signOut();
+
+                if (mounted) {
+                  // Navigate to login screen and clear all previous routes
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    '/login',
+                    (route) => false,
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error logging out: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } finally {
+                if (mounted) {
+                  setState(() => _loading = false);
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text(
+              'Logout',
+              style: TextStyle(color: Colors.white),
+            ),
+          )
+        ],
       ),
     );
   }

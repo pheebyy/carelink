@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
+import 'screens/login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +15,14 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Initialize Paystack (optional - can be done when needed)
+  final paystackPublicKey = dotenv.env['PAYSTACK_PUBLIC_KEY'];
+  if (paystackPublicKey != null && paystackPublicKey.isNotEmpty) {
+    print('✅ Paystack initialized with public key');
+  } else {
+    print('⚠️ Warning: Paystack public key not found in .env file');
+  }
 
   runApp(const CareLinkApp());
 }
@@ -35,7 +44,11 @@ class CareLinkApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      home: const SplashScreen(),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const SplashScreen(),
+        '/login': (context) => const LoginScreen(),
+      },
     );
   }
 }

@@ -1,0 +1,134 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========================= HELPER FUNCTIONS =========================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return request.auth.uid == uid;
+    }
+
+    // ========================= USERS COLLECTION =========================
+    match /users/{uid} {
+      // Any authenticated user can read any user profile (for messaging, search, etc.)
+      allow read: if isAuthenticated();
+      
+      // Users can create their own profile
+      allow create: if isAuthenticated() && isUser(uid);
+      
+      // Users can update their own profile
+      allow update: if isAuthenticated() && isUser(uid);
+      
+      // Users cannot delete their own profile
+      allow delete: if false;
+
+      // ========================= VISITS SUBCOLLECTION =========================
+      match /visits/{visitId} {
+        // Client can read their own visits
+        allow read: if isAuthenticated() && isUser(uid);
+        
+        // Client can create visits
+        allow create: if isAuthenticated() && isUser(uid) &&
+          request.resource.data.keys().hasAll(['dateTime', 'status']);
+        
+        // Client can update their visits
+        allow update: if isAuthenticated() && isUser(uid);
+        
+        // Client can delete their visits
+        allow delete: if isAuthenticated() && isUser(uid);
+      }
+
+      // ========================= PAYMENTS SUBCOLLECTION =========================
+      match /payments/{paymentId} {
+        // Client can read their payments
+        allow read: if isAuthenticated() && isUser(uid);
+        
+        // Client can create payments
+        allow create: if isAuthenticated() && isUser(uid);
+        
+        // Client can update their payments
+        allow update: if isAuthenticated() && isUser(uid);
+        
+        // Client can delete their payments
+        allow delete: if isAuthenticated() && isUser(uid);
+      }
+    }
+
+    // ========================= JOBS COLLECTION =========================
+    match /jobs/{jobId} {
+      // Anyone authenticated can read jobs
+      allow read: if isAuthenticated();
+      
+      // Authenticated users can create jobs
+      allow create: if isAuthenticated();
+      
+      // Job owner can update
+      allow update: if isAuthenticated();
+      
+      // Job owner can delete
+      allow delete: if isAuthenticated();
+
+      // ========================= APPLICATIONS SUBCOLLECTION =========================
+      match /applications/{applicationId} {
+        // Authenticated users can read applications
+        allow read: if isAuthenticated();
+        
+        // Authenticated users can create applications
+        allow create: if isAuthenticated();
+        
+        // Authenticated users can update applications
+        allow update: if isAuthenticated();
+        
+        // Authenticated users can delete applications
+        allow delete: if isAuthenticated();
+      }
+
+      // ========================= MESSAGES SUBCOLLECTION =========================
+      match /messages/{messageId} {
+        // Authenticated users can read messages
+        allow read: if isAuthenticated();
+        
+        // Authenticated users can send messages
+        allow create: if isAuthenticated();
+        
+        // Users can delete their own messages
+        allow delete: if isAuthenticated();
+      }
+    }
+
+    // ========================= CONVERSATIONS COLLECTION =========================
+    match /conversations/{conversationId} {
+      // Authenticated users can read conversations
+      allow read: if isAuthenticated();
+      
+      // Authenticated users can create conversations
+      allow create: if isAuthenticated();
+      
+      // Authenticated users can update conversations
+      allow update: if isAuthenticated();
+      
+      // Authenticated users can delete conversations
+      allow delete: if isAuthenticated();
+
+      // ========================= CONVERSATION MESSAGES SUBCOLLECTION =========================
+      match /messages/{messageId} {
+        // Authenticated users can read messages
+        allow read: if isAuthenticated();
+        
+        // Authenticated users can send messages
+        allow create: if isAuthenticated();
+        
+        // Users can delete their own messages
+        allow delete: if isAuthenticated();
+      }
+    }
+
+    // ========================= DENY ALL OTHER ACCESS =========================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

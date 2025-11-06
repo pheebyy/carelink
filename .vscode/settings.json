@@ -4,7 +4,8 @@
         "caregiverdashboard",
         "carelink",
         "dasboard",
-        "geoflutterfire"
+        "geoflutterfire",
+        "paystack"
     ],
     "java.configuration.updateBuildConfiguration": "automatic"
 }

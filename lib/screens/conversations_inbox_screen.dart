@@ -29,7 +29,8 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
     final stream = FirebaseFirestore.instance
         .collection('conversations')
         .where('participantIds', arrayContains: uid)
-        .orderBy('lastMessageTime', descending: true)
+        // Note: Removed orderBy - requires composite index with arrayContains
+        // Instead, sorting is done in Dart below
         .snapshots();
 
     return Scaffold(
@@ -125,6 +126,13 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
 
                 var docs = snap.data!.docs;
                 
+                // Sort by lastMessageTime in Dart (since we can't use orderBy with arrayContains)
+                docs.sort((a, b) {
+                  final timeA = (a['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+                  final timeB = (b['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+                  return timeB.compareTo(timeA); // Descending order (newest first)
+                });
+                
                 // Filter by search query
                 if (_searchQuery.isNotEmpty) {
                   docs = docs.where((doc) {
@@ -188,7 +196,7 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
                           border: Border.all(color: Colors.grey.shade200),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.03),
+                              color: Colors.black.withValues(alpha: 0.03),
                               blurRadius: 4,
                               offset: const Offset(0, 2),
                             ),

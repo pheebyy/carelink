@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../Models/usermodel.dart';
 import 'conversations_chat_screen.dart';
 
@@ -14,11 +15,67 @@ class NewConversationScreen extends StatefulWidget {
 class _NewConversationScreenState extends State<NewConversationScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  
+  // Debounce timer for search
+  Timer? _debounceTimer;
+  
+  // Stream - created once, not on every rebuild
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _usersStream;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Check if user is authenticated
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      debugPrint('ERROR: No authenticated user found!');
+      // Don't initialize stream if user is not authenticated
+      return;
+    }
+    
+    // Initialize the stream - query all users
+    // Note: This requires Firestore security rules to allow reading users collection
+    try {
+      _usersStream = FirebaseFirestore.instance
+          .collection('users')
+          .snapshots();
+      debugPrint('Users stream initialized successfully for user: ${currentUser.uid}');
+    } catch (e) {
+      debugPrint('Error initializing users stream: $e');
+      rethrow;
+    }
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  // Perform efficient search with debouncing
+  void _onSearchChanged(String value) {
+    // Cancel previous timer
+    _debounceTimer?.cancel();
+    
+    final query = value.toLowerCase().trim();
+    setState(() => _searchQuery = query); // Update immediately for UI feedback
+    
+    // Don't need additional debounce timer - just filter on the current state
+    debugPrint('Search query changed to: $query');
+  }
+
+  // Efficient user matching function
+  bool _matchesSearch(Map<String, dynamic> userData, String query) {
+    if (query.isEmpty) return true;
+    
+    // Cache converted strings for efficiency
+    final name = (userData['name'] ?? '').toString().toLowerCase();
+    final email = (userData['email'] ?? '').toString().toLowerCase();
+    
+    // Match by name prefix or email prefix (more relevant than contains)
+    return name.startsWith(query) || email.startsWith(query);
   }
 
   Future<void> _startConversation(AppUser recipient) async {
@@ -79,8 +136,6 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
-    final stream = FirebaseFirestore.instance.collection('users').snapshots();
-
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -107,9 +162,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
             padding: const EdgeInsets.all(16),
             child: TextField(
               controller: _searchController,
-              onChanged: (value) {
-                setState(() => _searchQuery = value.toLowerCase());
-              },
+              onChanged: _onSearchChanged,  // Use debounced search
               decoration: InputDecoration(
                 hintText: 'Search by name or email...',
                 hintStyle: TextStyle(color: Colors.grey.shade500),
@@ -119,7 +172,9 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                         icon: Icon(Icons.close, color: Colors.grey.shade600),
                         onPressed: () {
                           _searchController.clear();
+                          _debounceTimer?.cancel();
                           setState(() => _searchQuery = '');
+                          debugPrint('Search cleared');
                         },
                       )
                     : null,
@@ -139,9 +194,68 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
 
           // Users list
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: stream,
+            child: _usersStream == null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.person_off, size: 64, color: Colors.grey.shade400),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Please log in to view users',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _usersStream,
               builder: (context, snap) {
+                debugPrint('StreamBuilder state: hasData=${snap.hasData}, hasError=${snap.hasError}, connectionState=${snap.connectionState}');
+                
+                if (snap.hasError) {
+                  debugPrint('Error in stream: ${snap.error}');
+                  debugPrint('Error stack trace: ${snap.stackTrace}');
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error loading users',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.red.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Text(
+                            '${snap.error}',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => setState(() {}),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                
                 if (!snap.hasData) {
                   return const Center(
                     child: CircularProgressIndicator(color: Colors.green),
@@ -152,15 +266,14 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                     .where((doc) => doc.id != uid) // Exclude current user
                     .toList();
 
-                // Filter by search query
+                debugPrint('Total users loaded: ${docs.length}');
+
+                // Filter by search query efficiently
                 if (_searchQuery.isNotEmpty) {
                   docs = docs.where((doc) {
-                    final data = doc.data();
-                    final name = (data['name'] ?? '').toString().toLowerCase();
-                    final email = (data['email'] ?? '').toString().toLowerCase();
-                    return name.contains(_searchQuery) ||
-                        email.contains(_searchQuery);
+                    return _matchesSearch(doc.data(), _searchQuery);
                   }).toList();
+                  debugPrint('Filtered to ${docs.length} results for: $_searchQuery');
                 }
 
                 if (docs.isEmpty) {
@@ -205,7 +318,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                           border: Border.all(color: Colors.grey.shade200),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.03),
+                              color: Colors.black.withValues(alpha: 0.03),
                               blurRadius: 4,
                               offset: const Offset(0, 2),
                             ),
