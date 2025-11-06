@@ -51,6 +51,7 @@ dependencies:
   dotenv: ^4.2.0
   flutter_dotenv: ^6.0.0
   paystack_payment: ^1.0.0
+  flutter_svg: ^2.2.2
 
 dev_dependencies:
   flutter_test:

@@ -3,7 +3,6 @@ import 'package:carelink/screens/profile_edit_screen.dart';
 import 'package:carelink/screens/all_jobs_screen.dart';
 import 'package:carelink/screens/conversations_inbox_screen.dart';
 import 'package:carelink/screens/caregiver_wallet_screen.dart';
-import 'package:carelink/screens/search_caregivers_screen.dart';
 import 'package:carelink/widgets/ai_assistant_widget.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -17,7 +16,6 @@ class _Constants {
   static const int errorMessageLength = 100;
   static const Duration refreshDelay = Duration(milliseconds: 400);
   static const String openStatus = 'open';
-  static const String pendingStatus = 'pending';
 }
 
 class CaregiverDashboard extends StatefulWidget {
@@ -119,18 +117,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
     _navigateToScreen(const AllJobsScreen());
   }
 
-  void _navigateToSearchCaregivers() {
-    _navigateToScreen(const SearchCaregiversScreen());
-  }
-
   // ==================== Data Processing Methods ====================
-  int _getPendingCount(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
-    return docs.where((doc) {
-      final status = _safeReadString(doc.data()['status']);
-      return status.toLowerCase() == _Constants.pendingStatus;
-    }).length;
-  }
-
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _filterValidDocs(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) {
@@ -402,8 +389,6 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSearchBar(),
-            const SizedBox(height: 24),
             _buildStatsSection(validDocs),
             const SizedBox(height: 24),
             _buildSectionHeader('Next Up', _navigateToAllJobs),
@@ -460,13 +445,16 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   }
 
   Widget _buildAiAssistantFab() {
-    return FloatingActionButton(
+    return FloatingActionButton.extended(
       heroTag: 'ai_fab',
       backgroundColor: Colors.green,
       foregroundColor: Colors.white,
       onPressed: () => setState(() => _showAiAssistant = !_showAiAssistant),
-      tooltip: _showAiAssistant ? 'Close AI Assistant' : 'Open AI Assistant',
-      child: Icon(_showAiAssistant ? Icons.close : Icons.smart_toy),
+      tooltip: _showAiAssistant 
+          ? 'Close AI Assistant' 
+          : 'Get help from AI Assistant - Ask questions, get job recommendations',
+      icon: Icon(_showAiAssistant ? Icons.close : Icons.smart_toy),
+      label: Text(_showAiAssistant ? 'Close' : 'AI Help'),
     );
   }
 
@@ -506,57 +494,27 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
     );
   }
 
-  Widget _buildSearchBar() {
-    return GestureDetector(
-      onTap: _navigateToSearchCaregivers,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade300),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.search, color: Colors.grey.shade600, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Search caregivers by location...',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade500,
-                ),
-              ),
-            ),
-            Icon(Icons.tune, color: Colors.green.shade600, size: 18),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildStatsSection(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> validDocs,
   ) {
-    final pendingCount = _getPendingCount(validDocs);
-    final completionPercent = validDocs.isEmpty
-        ? 0
-        : (((validDocs.length - pendingCount) / validDocs.length) * 100)
-            .toStringAsFixed(0);
+    // Count jobs by status
+    final openJobs = validDocs.where((doc) {
+      final status = _safeReadString(doc.data()['status']).toLowerCase();
+      return status == 'open';
+    }).length;
+    
+    final pendingJobs = validDocs.where((doc) {
+      final status = _safeReadString(doc.data()['status']).toLowerCase();
+      return status == 'pending';
+    }).length;
+    
+    final totalJobs = validDocs.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Your Progress',
+          'Job Overview',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
             color: Colors.grey.shade800,
@@ -567,28 +525,31 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
           children: [
             Expanded(
               child: _buildStatCard(
-                icon: Icons.visibility,
-                label: 'Visits',
-                value: '${validDocs.length}',
+                icon: Icons.work_outline,
+                label: 'Available',
+                value: '$openJobs',
                 color: Colors.blue,
+                subtitle: 'Open jobs',
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _buildStatCard(
-                icon: Icons.pending_actions,
+                icon: Icons.hourglass_empty,
                 label: 'Pending',
-                value: '$pendingCount',
+                value: '$pendingJobs',
                 color: Colors.orange,
+                subtitle: 'In review',
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _buildStatCard(
-                icon: Icons.trending_up,
-                label: 'Completion',
-                value: '$completionPercent%',
+                icon: Icons.list_alt,
+                label: 'Total',
+                value: '$totalJobs',
                 color: Colors.green,
+                subtitle: 'All jobs',
               ),
             ),
           ],
@@ -602,11 +563,19 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
     required String label,
     required String value,
     required Color color,
+    String? subtitle,
   }) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withOpacity(0.08),
+            color.withOpacity(0.03),
+          ],
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withOpacity(0.2)),
       ),
@@ -617,29 +586,40 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: color.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 18, color: color),
+            child: Icon(icon, size: 20, color: color),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             value,
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Colors.grey.shade900,
+              color: color,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             label,
             style: TextStyle(
-              fontSize: 11,
-              color: color,
+              fontSize: 12,
+              color: Colors.grey.shade800,
               fontWeight: FontWeight.w600,
             ),
             textAlign: TextAlign.center,
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 9,
+                color: Colors.grey.shade600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ],
       ),
     );

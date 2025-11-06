@@ -6,6 +6,8 @@ import 'package:carelink/screens/visits_screen.dart';
 import 'package:carelink/screens/search_caregivers_screen.dart';
 import 'package:carelink/screens/post_job_screen.dart';
 import 'package:carelink/screens/client_payment_screen.dart';
+import 'package:carelink/screens/care_plan_screen.dart';
+import 'package:carelink/services/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +22,7 @@ class ClientDashboard extends StatefulWidget {
 class _ClientDashboardState extends State<ClientDashboard> {
   final _uid = FirebaseAuth.instance.currentUser?.uid;
   final _userName = FirebaseAuth.instance.currentUser?.displayName ?? 'User';
+  final _fs = FirestoreService();
   int _currentNavIndex = 0;
 
   @override
@@ -211,8 +214,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           .doc(_uid)
           .collection('visits')
           .where('status', isEqualTo: 'upcoming')
-          // Note: Removed orderBy - requires composite index with where clause
-          // Instead, sorting is done in Dart below
+
           .snapshots(),
       builder: (context, snapshot) {
         debugPrint('Visits snapshot state: ${snapshot.connectionState}');
@@ -501,9 +503,14 @@ class _ClientDashboardState extends State<ClientDashboard> {
               ],
             ),
             TextButton(
-              onPressed: () => _showSnackBar('Viewing care plan'),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CarePlanScreen()),
+                );
+              },
               child: Text(
-                'View',
+                'View All',
                 style: TextStyle(
                   color: Colors.grey.shade600,
                   fontSize: 13,
@@ -514,18 +521,92 @@ class _ClientDashboardState extends State<ClientDashboard> {
           ],
         ),
         const SizedBox(height: 12),
-        _buildCarePlanItem(
-          icon: Icons.schedule,
-          title: 'Daily',
-          description: 'Medication at 9:00 AM and 9:00 PM',
-          color: Colors.blue,
-        ),
-        const SizedBox(height: 10),
-        _buildCarePlanItem(
-          icon: Icons.trending_up,
-          title: 'Goal',
-          description: 'Increase mobility • Week 3',
-          color: Colors.green,
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _fs.carePlansStream(_uid!),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final carePlans = snapshot.data?.docs ?? [];
+
+            if (carePlans.isEmpty) {
+              return GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CarePlanScreen()),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_circle_outline, color: Colors.grey.shade400),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Add your first care plan',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            // Show first 2 care plans
+            final displayPlans = carePlans.take(2).toList();
+
+            return Column(
+              children: displayPlans.map((doc) {
+                final plan = doc.data();
+                final type = plan['type'] ?? 'general';
+                final title = plan['title'] ?? 'Untitled';
+                final description = plan['description'] ?? '';
+
+                IconData icon;
+                Color color;
+
+                switch (type) {
+                  case 'medication':
+                    icon = Icons.medication;
+                    color = Colors.blue;
+                    break;
+                  case 'goal':
+                    icon = Icons.trending_up;
+                    color = Colors.green;
+                    break;
+                  case 'appointment':
+                    icon = Icons.calendar_today;
+                    color = Colors.orange;
+                    break;
+                  case 'exercise':
+                    icon = Icons.fitness_center;
+                    color = Colors.purple;
+                    break;
+                  default:
+                    icon = Icons.favorite;
+                    color = Colors.pink;
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _buildCarePlanItem(
+                    icon: icon,
+                    title: title,
+                    description: description,
+                    color: color,
+                  ),
+                );
+              }).toList(),
+            );
+          },
         ),
       ],
     );

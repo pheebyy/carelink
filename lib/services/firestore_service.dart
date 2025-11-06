@@ -161,6 +161,189 @@ class FirestoreService {
     }
   }
 
+  // ========================= BIDS =========================
+  Future<String> createBid({
+    required String jobId,
+    required String caregiverId,
+    required double amount,
+    required String proposal,
+    int? estimatedDuration, // in hours
+  }) async {
+    try {
+      if (jobId.isEmpty || caregiverId.isEmpty) {
+        throw Exception("Job ID and Caregiver ID cannot be empty");
+      }
+      if (amount <= 0) {
+        throw Exception("Bid amount must be greater than 0");
+      }
+
+      // Check if caregiver already has a bid on this job
+      final existingBids = await _db
+          .collection('jobs')
+          .doc(jobId)
+          .collection('bids')
+          .where('caregiverId', isEqualTo: caregiverId)
+          .get();
+
+      if (existingBids.docs.isNotEmpty) {
+        throw Exception("You have already placed a bid on this job");
+      }
+
+      final ref = await _db
+          .collection('jobs')
+          .doc(jobId)
+          .collection('bids')
+          .add({
+        'jobId': jobId,
+        'caregiverId': caregiverId,
+        'amount': amount,
+        'proposal': proposal,
+        'estimatedDuration': estimatedDuration,
+        'status': 'pending', // pending, approved, rejected
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      return ref.id;
+    } catch (e) {
+      print('🔥 Error creating bid: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateBid({
+    required String jobId,
+    required String bidId,
+    double? amount,
+    String? proposal,
+    int? estimatedDuration,
+  }) async {
+    try {
+      final Map<String, dynamic> updates = {
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      
+      if (amount != null && amount > 0) updates['amount'] = amount;
+      if (proposal != null) updates['proposal'] = proposal;
+      if (estimatedDuration != null) updates['estimatedDuration'] = estimatedDuration;
+
+      await _db
+          .collection('jobs')
+          .doc(jobId)
+          .collection('bids')
+          .doc(bidId)
+          .update(updates);
+    } catch (e) {
+      print('🔥 Error updating bid: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> approveBid(String jobId, String bidId, String caregiverId) async {
+    try {
+      if (jobId.isEmpty || bidId.isEmpty || caregiverId.isEmpty) {
+        throw Exception("Job ID, Bid ID, and Caregiver ID cannot be empty");
+      }
+
+      // Use transaction to ensure atomicity
+      await _db.runTransaction((txn) async {
+        // Update the approved bid
+        final bidRef = _db.collection('jobs').doc(jobId).collection('bids').doc(bidId);
+        txn.update(bidRef, {
+          'status': 'approved',
+          'approvedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        // Reject all other bids
+        final otherBidsSnapshot = await _db
+            .collection('jobs')
+            .doc(jobId)
+            .collection('bids')
+            .where('status', isEqualTo: 'pending')
+            .get();
+
+        for (var doc in otherBidsSnapshot.docs) {
+          if (doc.id != bidId) {
+            txn.update(doc.reference, {
+              'status': 'rejected',
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          }
+        }
+
+        // Update job status and assign caregiver
+        final jobRef = _db.collection('jobs').doc(jobId);
+        txn.update(jobRef, {
+          'caregiverId': caregiverId,
+          'status': 'assigned',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      });
+    } catch (e) {
+      print('🔥 Error approving bid: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> rejectBid(String jobId, String bidId) async {
+    try {
+      await _db
+          .collection('jobs')
+          .doc(jobId)
+          .collection('bids')
+          .doc(bidId)
+          .update({
+        'status': 'rejected',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('🔥 Error rejecting bid: $e');
+      rethrow;
+    }
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> jobBidsStream(String jobId) {
+    return _db
+        .collection('jobs')
+        .doc(jobId)
+        .collection('bids')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>> getBid(
+      String jobId, String bidId) async {
+    try {
+      return await _db
+          .collection('jobs')
+          .doc(jobId)
+          .collection('bids')
+          .doc(bidId)
+          .get();
+    } catch (e) {
+      print('🔥 Error getting bid: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> hasUserBidOnJob(String jobId, String caregiverId) async {
+    try {
+      final bids = await _db
+          .collection('jobs')
+          .doc(jobId)
+          .collection('bids')
+          .where('caregiverId', isEqualTo: caregiverId)
+          .limit(1)
+          .get();
+
+      return bids.docs.isNotEmpty;
+    } catch (e) {
+      print('🔥 Error checking bid: $e');
+      return false;
+    }
+  }
+
   Stream<QuerySnapshot<Map<String, dynamic>>> jobApplicationsStream(
       String jobId) {
     return _db
@@ -599,6 +782,106 @@ class FirestoreService {
       print('⭐ Premium deactivated for caregiver: $caregiverId');
     } catch (e) {
       print('🔥 Error deactivating premium: $e');
+      rethrow;
+    }
+  }
+  // ========================= CARE PLANS =========================
+  Future<String> createCarePlan({
+    required String clientId,
+    required String type,
+    required String title,
+    required String description,
+    String? time,
+    String? frequency,
+    bool isCompleted = false,
+  }) async {
+    try {
+      if (clientId.isEmpty) throw Exception("Client ID cannot be empty");
+      if (title.isEmpty) throw Exception("Care plan title is required");
+
+      final ref = await _db
+          .collection('users')
+          .doc(clientId)
+          .collection('carePlans')
+          .add({
+        'type': type,
+        'title': title,
+        'description': description,
+        'time': time,
+        'frequency': frequency,
+        'isCompleted': isCompleted,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      return ref.id;
+    } catch (e) {
+      print('Error creating care plan: $e');
+      rethrow;
+    }
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> carePlansStream(String clientId) {
+    return _db
+        .collection('users')
+        .doc(clientId)
+        .collection('carePlans')
+        .orderBy('createdAt', descending: false)
+        .snapshots();
+  }
+
+  Future<void> updateCarePlan(
+    String clientId,
+    String carePlanId,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      if (clientId.isEmpty || carePlanId.isEmpty) {
+        throw Exception("Client ID and Care Plan ID cannot be empty");
+      }
+
+      await _db
+          .collection('users')
+          .doc(clientId)
+          .collection('carePlans')
+          .doc(carePlanId)
+          .update({
+        ...data,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Error updating care plan: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> toggleCarePlanCompletion(
+    String clientId,
+    String carePlanId,
+    bool isCompleted,
+  ) async {
+    try {
+      await updateCarePlan(clientId, carePlanId, {'isCompleted': isCompleted});
+    } catch (e) {
+      print('Error toggling care plan completion: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteCarePlan(String clientId, String carePlanId) async {
+    try {
+      if (clientId.isEmpty || carePlanId.isEmpty) {
+        throw Exception("Client ID and Care Plan ID cannot be empty");
+      }
+
+      await _db
+          .collection('users')
+          .doc(clientId)
+          .collection('carePlans')
+          .doc(carePlanId)
+          .delete();
+    } catch (e) {
+      print('Error deleting care plan: $e');
       rethrow;
     }
   }

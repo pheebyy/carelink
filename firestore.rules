@@ -55,6 +55,21 @@ service cloud.firestore {
         // Client can delete their payments
         allow delete: if isAuthenticated() && isUser(uid);
       }
+
+      // ========================= CARE PLANS SUBCOLLECTION =========================
+      match /carePlans/{carePlanId} {
+        // User can read their own care plans
+        allow read: if isAuthenticated() && isUser(uid);
+        
+        // User can create their own care plans
+        allow create: if isAuthenticated() && isUser(uid);
+        
+        // User can update their own care plans
+        allow update: if isAuthenticated() && isUser(uid);
+        
+        // User can delete their own care plans
+        allow delete: if isAuthenticated() && isUser(uid);
+      }
     }
 
     // ========================= JOBS COLLECTION =========================
@@ -96,6 +111,28 @@ service cloud.firestore {
         
         // Users can delete their own messages
         allow delete: if isAuthenticated();
+      }
+
+      // ========================= BIDS SUBCOLLECTION =========================
+      match /bids/{bidId} {
+        // Any authenticated user can read bids
+        allow read: if isAuthenticated();
+        
+        // Caregivers can create bids (must match their own ID)
+        allow create: if isAuthenticated() && 
+          request.resource.data.caregiverId == request.auth.uid &&
+          request.resource.data.keys().hasAll(['jobId', 'caregiverId', 'amount', 'proposal', 'status']) &&
+          request.resource.data.status == 'pending';
+        
+        // Bid owner can update their own bid (amount, proposal, duration only)
+        allow update: if isAuthenticated() && 
+          (resource.data.caregiverId == request.auth.uid || 
+           get(/databases/$(database)/documents/jobs/$(jobId)).data.clientId == request.auth.uid);
+        
+        // Job owner or bid owner can delete
+        allow delete: if isAuthenticated() && 
+          (resource.data.caregiverId == request.auth.uid || 
+           get(/databases/$(database)/documents/jobs/$(jobId)).data.clientId == request.auth.uid);
       }
     }
 
