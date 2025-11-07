@@ -65,14 +65,7 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   flutter_native_splash: ^2.3.7
 
-flutter_native_splash:
-  color: "#EEF7EE"
-  image: assets/logo.png
-  android: true
-  ios: true
-  fullscreen: true
-  android_gravity: center
-  ios_content_mode: scaleAspectFit
+
 
 flutter_icons:
   android: true
