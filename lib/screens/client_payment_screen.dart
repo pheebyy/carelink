@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/paystack_service.dart';
 import '../services/payment_firestore_service.dart';
@@ -27,6 +28,11 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
 
   bool _isProcessing = false;
   String? _selectedPaymentMethod = 'paystack';
+
+  bool _isAmountValid() {
+    final value = double.tryParse(_amountController.text);
+    return value != null && value > 0 && value >= 100;
+  }
 
   @override
   void initState() {
@@ -113,22 +119,25 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
         return;
       }
 
-      // Initiate Paystack checkout with payment config
-      // The paymentConfig contains all necessary data:
-      // - amount in Kobo (paymentConfig['amount'])
-      // - email (paymentConfig['email'])
-      // - reference (paymentConfig['reference'])
-      // - metadata with transactionId for linking
-      await _initiatePaystackCheckout(paymentConfig, reference);
+      // Initiate Paystack checkout with payment config and verify result
+      final success = await _initiatePaystackCheckout(paymentConfig, reference);
 
-      // After successful Paystack payment, mark transaction as completed
+      if (!success) {
+        // Payment not completed or verification failed
+        if (!mounted) return;
+        _showError('Payment was not completed. Please try again.');
+        setState(() => _isProcessing = false);
+        return;
+      }
+
+      // After successful Paystack payment & verification, mark transaction as completed
       await _paymentService.completeTransaction(reference);
 
       if (!mounted) return;
 
       _showSuccess(
         'Payment successful!',
-        'KES ${amount.toStringAsFixed(2)} has been transferred to ${ widget.caregiverName}',
+        'KES ${amount.toStringAsFixed(2)} has been transferred to ${widget.caregiverName}',
       );
 
       Navigator.pop(context, true);
@@ -349,6 +358,7 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
               controller: _amountController,
               keyboardType: TextInputType.number,
               onChanged: (_) => setState(() {}),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\.]'))],
               decoration: InputDecoration(
                 prefixText: 'KES ',
                 hintText: '0.00',
@@ -361,6 +371,11 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
                   vertical: 14,
                 ),
               ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Minimum KES 100.00',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 24),
 
@@ -454,34 +469,59 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
             ),
             const SizedBox(height: 32),
 
+            // Saved payment methods (placeholder)
+            Text(
+              'Saved payment methods',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.credit_card, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('No saved cards')),
+                  TextButton(
+                    onPressed: _onAddCardPressed,
+                    child: const Text('Add card'),
+                  ),
+                ],
+              ),
+            ),
+
             // Pay button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _isProcessing ? null : _processPayment,
+                onPressed: (_isProcessing || !_isAmountValid()) ? null : _processPayment,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   disabledBackgroundColor: Colors.grey.shade300,
                 ),
-                child: _isProcessing
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : Text(
-                        'Pay KES ${breakdown['totalAmount']!.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+                              child: _isProcessing
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  : Text(
+                                      'Pay KES ${breakdown['totalAmount']!.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
               ),
             ),
           ],
@@ -490,7 +530,14 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
     );
   }
 
-  Future<void> _initiatePaystackCheckout(
+            /// Placeholder: Add card / manage saved payment methods
+            void _onAddCardPressed() {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Add card flow is not implemented yet')),
+              );
+            }
+
+  Future<bool> _initiatePaystackCheckout(
     Map<String, dynamic> paymentConfig,
     String reference,
   ) async {
@@ -527,18 +574,17 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
       //   _showError('Payment failed');
       // }
 
-      // For now, simulate successful payment flow
-      if (mounted) {
-        _showSuccess(
-          'Payment Successful!',
-          'Your payment has been processed. Caregiver wallet will be updated shortly.',
-        );
-        Future.delayed(const Duration(seconds: 2), () {
-          Navigator.pop(context, true);
-        });
+      // For now, simulate successful payment flow by verifying payment
+      final verified = await _paystackService.verifyPayment(reference);
+
+      if (!verified) {
+        return false;
       }
+
+      return true;
     } catch (e) {
       _showError('Paystack error: $e');
+      return false;
     }
   }
 }

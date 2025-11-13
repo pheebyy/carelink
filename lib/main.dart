@@ -15,18 +15,17 @@ Future<void> main() async {
       statusBarIconBrightness: Brightness.dark,
     ),
   );
-  
-  // Load critical services first (before showing UI)
+
+  // Loads critical services first 
   try {
-    // Load environment variables
+    // Loads environment variables
     await dotenv.load(fileName: ".env");
     
     // Initialize Firebase
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-
-    // Validate Paystack (non-blocking)
+    // Validates Paystack 
     final paystackPublicKey = dotenv.env['PAYSTACK_PUBLIC_KEY'];
     if (paystackPublicKey != null && paystackPublicKey.isNotEmpty) {
       print(' Paystack initialized with public key');
@@ -36,7 +35,6 @@ Future<void> main() async {
   } catch (e) {
     print(' Initialization error: $e');
   }
-
   runApp(const CareLinkApp());
 }
 

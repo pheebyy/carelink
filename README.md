@@ -1,4 +1,4 @@
-# CareLink 🏥
+# CareLink 
 
 A comprehensive Flutter-based healthcare management platform connecting clients with professional caregivers. CareLink streamlines the process of finding, hiring, and managing healthcare services with features for job posting, bidding, care planning, and real-time communication.
 
@@ -29,13 +29,13 @@ A comprehensive Flutter-based healthcare management platform connecting clients 
 - **AI Assistant**: Get help with job applications and care guidance
 
 ### Core Features
-- 🔐 **Firebase Authentication**: Secure email/password authentication with email verification
-- 💬 **Real-time Chat**: Firebase Firestore-powered instant messaging
-- 🔔 **Push Notifications**: Stay updated on important events
-- 📊 **Analytics Dashboard**: Track key metrics and statistics
-- 🎨 **Modern UI**: Clean, Material Design 3 interface
-- 🌓 **Responsive Design**: Optimized for all screen sizes
-- 🔄 **Offline Support**: Continue working with limited connectivity
+-  **Firebase Authentication**: Secure email/password authentication with email verification
+-  **Real-time Chat**: Firebase Firestore-powered instant messaging
+-  **Push Notifications**: Stay updated on important events
+-  **Analytics Dashboard**: Track key metrics and statistics
+-  **Modern UI**: Clean, Material Design 3 interface
+-  **Responsive Design**: Optimized for all screen sizes
+-  **Offline Support**: Continue working with limited connectivity
 
 ##  Tech Stack
 
@@ -58,7 +58,7 @@ A comprehensive Flutter-based healthcare management platform connecting clients 
 - `image_picker`: Profile photo uploads
 - `flutter_svg`: SVG image support
 
-## 📦 Installation
+##  Installation
 
 ### Prerequisites
 - Flutter SDK (3.0 or higher)
@@ -258,7 +258,7 @@ theme: ThemeData(
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-##  Authors
+##  Author
 
 - **Pheeby** - *Initial work* - [pheebyy](https://github.com/pheebyy)
 
