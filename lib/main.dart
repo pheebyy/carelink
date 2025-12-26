@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
+import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +26,9 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    
+    // Initialize notification service (Spark plan - client-side only)
+    await NotificationService.instance.init();
     // Validates Paystack 
     final paystackPublicKey = dotenv.env['PAYSTACK_PUBLIC_KEY'];
     if (paystackPublicKey != null && paystackPublicKey.isNotEmpty) {

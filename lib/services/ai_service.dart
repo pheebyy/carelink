@@ -73,7 +73,7 @@ Available Features to mention:
       return response.text ??
           'Unable to process your message. Please try again.';
     } on GenerativeAIException catch (e) {
-      print('🔥 Generative AI Error: ${e.message}');
+      print(' Generative AI Error: ${e.message}');
       if (e.message.contains('API_KEY_INVALID')) {
         return 'Invalid API key. Please check your configuration.';
       } else if (e.message.contains('RESOURCE_EXHAUSTED')) {
@@ -81,7 +81,7 @@ Available Features to mention:
       }
       return 'I encountered an error: ${e.message}. Please try again.';
     } catch (e) {
-      print('🔥 AI Chat Error: $e');
+      print(' AI Chat Error: $e');
       return 'Sorry, I encountered an unexpected error. Please try again or contact support.';
     }
   }

@@ -93,3 +93,107 @@ exports.verifyTransaction = functions.https.onCall(async (data, context) => {
     );
   }
 });
+
+// 🔔 Send push notification when a new message is created
+exports.onNewMessage = functions.firestore
+  .document("conversations/{conversationId}/messages/{messageId}")
+  .onCreate(async (snapshot, context) => {
+    const { conversationId, messageId } = context.params;
+    const messageData = snapshot.data();
+    const senderId = messageData.senderId;
+    const messageText = messageData.text || "";
+
+    try {
+      // Get conversation participants
+      const conversationDoc = await db
+        .collection("conversations")
+        .doc(conversationId)
+        .get();
+
+      if (!conversationDoc.exists) {
+        console.log("Conversation not found");
+        return null;
+      }
+
+      const participantIds = conversationDoc.data().participantIds || [];
+      const recipientIds = participantIds.filter((id) => id !== senderId);
+
+      if (recipientIds.length === 0) {
+        console.log("No recipients found");
+        return null;
+      }
+
+      // Get sender info
+      const senderDoc = await db.collection("users").doc(senderId).get();
+      const senderName =
+        senderDoc.exists && senderDoc.data().displayName
+          ? senderDoc.data().displayName
+          : "Someone";
+
+      // Send notification to each recipient
+      const notificationPromises = recipientIds.map(async (recipientId) => {
+        const userDoc = await db.collection("users").doc(recipientId).get();
+        if (!userDoc.exists) return null;
+
+        const userData = userDoc.data();
+        const fcmTokens = userData.fcmTokens || [];
+
+        if (fcmTokens.length === 0) {
+          console.log(`No FCM tokens for user ${recipientId}`);
+          return null;
+        }
+
+        // Prepare notification payload
+        const payload = {
+          notification: {
+            title: senderName,
+            body: messageText.substring(0, 100), // Truncate long messages
+          },
+          data: {
+            type: "chat_message",
+            conversationId,
+            messageId,
+            senderId,
+          },
+        };
+
+        // Send to all tokens
+        const sendPromises = fcmTokens.map((token) =>
+          admin
+            .messaging()
+            .send({
+              ...payload,
+              token,
+            })
+            .catch((err) => {
+              console.error(
+                `Error sending to token ${token}:`,
+                err.message
+              );
+              // Remove invalid tokens
+              if (
+                err.code === "messaging/invalid-registration-token" ||
+                err.code === "messaging/registration-token-not-registered"
+              ) {
+                return db
+                  .collection("users")
+                  .doc(recipientId)
+                  .update({
+                    fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+                  });
+              }
+              return null;
+            })
+        );
+
+        return Promise.all(sendPromises);
+      });
+
+      await Promise.all(notificationPromises);
+      console.log("✅ Push notifications sent successfully");
+      return null;
+    } catch (error) {
+      console.error("❌ Error sending push notification:", error);
+      return null;
+    }
+  });

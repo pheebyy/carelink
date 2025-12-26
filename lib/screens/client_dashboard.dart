@@ -1171,7 +1171,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
   }
 
   void _navigateToPayments() {
-    _showPaymentOptionsSheet();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ClientPaymentScreen(caregiverId: '', caregiverName: '')),
+    ).then((_) => setState(() => _currentNavIndex = 0));
   }
 
   void _navigateToCaregivers() {
@@ -1195,193 +1198,55 @@ class _ClientDashboardState extends State<ClientDashboard> {
     ).then((_) => setState(() => _currentNavIndex = 0));
   }
 
-  void _showPaymentOptionsSheet() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => _buildPaymentOptionsSheet(),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-    );
-  }
+  // Unused payment options sheet - removed to avoid warning
+  // void _showPaymentOptionsSheet() {
+  //   showModalBottomSheet(
+  //     context: context,
+  //     builder: (context) => _buildPaymentOptionsSheet(),
+  //     shape: const RoundedRectangleBorder(
+  //       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  //     ),
+  //   );
+  // }
 
-  Widget _buildPaymentOptionsSheet() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Make Payment',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: _buildPaymentsList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // Widget _buildPaymentOptionsSheet() {
+  //   return SafeArea(
+  //     child: Padding(
+  //       padding: const EdgeInsets.all(16),
+  //       child: Column(
+  //         mainAxisSize: MainAxisSize.min,
+  //         crossAxisAlignment: CrossAxisAlignment.start,
+  //         children: [
+  //           Row(
+  //             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //             children: [
+  //               const Text(
+  //                 'Make Payment',
+  //                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+  //               ),
+  //               GestureDetector(
+  //                 onTap: () => Navigator.pop(context),
+  //                 child: const Icon(Icons.close),
+  //               ),
+  //             ],
+  //           ),
+  //           const SizedBox(height: 20),
+  //           Expanded(
+  //             child: _buildPaymentsList(),
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
 
-  Widget _buildPaymentsList() {
-    if (_uid == null) return const SizedBox.shrink();
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('jobs')
-          .where('clientId', isEqualTo: _uid)
-          .where('status', isEqualTo: 'assigned')
-          // Note: Removed orderBy - requires composite index with two where clauses
-          // Instead, sorting is done in Dart below
-          .snapshots(),
-      builder: (context, snapshot) {
-        debugPrint('Payments snapshot state: ${snapshot.connectionState}');
-        
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingState('Loading payments...');
-        }
-
-        if (snapshot.hasError) {
-          debugPrint('Payments snapshot error: ${snapshot.error}');
-          return _buildErrorState(
-            icon: Icons.payment_outlined,
-            title: 'Unable to load payments',
-            message: 'Check your connection or Firestore permissions',
-            onRetry: () => setState(() {}),
-          );
-        }
-
-        var jobs = snapshot.data?.docs ?? [];
-        debugPrint('Loaded ${jobs.length} payment jobs');
-
-        // Sort by createdAt in Dart
-        jobs.sort((a, b) {
-          final dateA = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime(1970);
-          final dateB = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime(1970);
-          return dateB.compareTo(dateA); // Descending order
-        });
-
-        if (jobs.isEmpty) {
-          return _buildEmptyState(
-            icon: Icons.payment_outlined,
-            title: 'No Active Assignments',
-            message: 'Assign a caregiver to make payments',
-          );
-        }
-
-        return ListView.builder(
-          itemCount: jobs.length,
-          itemBuilder: (context, index) {
-            final job = jobs[index].data() as Map<String, dynamic>;
-            final caregiverId = job['assignedCaregiverId'] ?? '';
-            final caregiverName = job['assignedCaregiverName'] ?? 'Unknown';
-            final jobTitle = job['title'] ?? 'Job';
-
-            return GestureDetector(
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ClientPaymentScreen(
-                      caregiverId: caregiverId,
-                      caregiverName: caregiverName,
-                    ),
-                  ),
-                ).then((_) => setState(() => _currentNavIndex = 0));
-              },
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade100,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(
-                        child: Text(
-                          caregiverName.isNotEmpty
-                              ? caregiverName[0].toUpperCase()
-                              : '?',
-                          style: TextStyle(
-                            color: Colors.green.shade600,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            caregiverName,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            jobTitle,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.arrow_forward_ios,
-                      size: 16,
-                      color: Colors.grey.shade600,
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
+  // Widget _buildPaymentsList() {
+  //   if (_uid == null) return const SizedBox.shrink();
+  //
+  //   return StreamBuilder<QuerySnapshot>(
+  //     ... (commented out - unused payment sheet method)
+  //   );
+  // }
 
   // ==================== Stream Queries ====================
   Stream<int> _getVisitsToday() {

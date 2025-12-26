@@ -3,6 +3,12 @@ allprojects {
         google()
         mavenCentral()
     }
+    
+    plugins.withId("com.android.library") {
+        configure<com.android.build.gradle.LibraryExtension> {
+            namespace = "com.example.${project.name}"
+        }
+    }
 }
 
 val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()

@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../services/firestore_service.dart';
+import '../services/notification_service.dart';
 import '../Models/message_model.dart';
 
 class ConversationChatScreen extends StatefulWidget {
@@ -14,12 +19,78 @@ class ConversationChatScreen extends StatefulWidget {
 class _ConversationChatScreenState extends State<ConversationChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollController = ScrollController();
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _callSub;
+  String? _activeIncomingCallId;
 
   @override
+  void initState() {
+    super.initState();
+    _listenForIncomingCalls();
+    _ensureTokenSaved();
+  }
+
+  void _ensureTokenSaved() async {
+    await NotificationService.instance.ensureUserTokenSaved();
+  }
+
   void dispose() {
+    _callSub?.cancel();
     _msgCtrl.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _listenForIncomingCalls() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    _callSub = FirebaseFirestore.instance
+        .collection('calls')
+        .where('conversationId', isEqualTo: widget.conversationId)
+        .snapshots()
+        .listen((snap) {
+      for (final change in snap.docChanges) {
+        if (change.type == DocumentChangeType.added) {
+          final data = change.doc.data();
+          if (data == null) continue;
+          final callerId = data['callerId'] as String?;
+          final offer = data['offer'];
+          final callId = change.doc.id;
+
+          // If this user is not the caller and there's an offer, show incoming
+          if (callerId != uid && offer != null && _activeIncomingCallId != callId) {
+            _activeIncomingCallId = callId;
+            // show dialog
+            if (mounted) {
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Incoming call'),
+                  content: Text('${data['callerDisplayName'] ?? 'Caller'} is calling'),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        // optionally delete or mark declined later
+                      },
+                      child: const Text('Decline'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _startVideoCall();
+                      },
+                      child: const Text('Answer (Jitsi)'),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+        }
+      }
+    });
   }
 
   void _scrollToBottom() {
@@ -118,19 +189,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.call_outlined),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Call feature coming soon')),
-              );
-            },
+            onPressed: () => _startVoiceCall(),
           ),
           IconButton(
             icon: const Icon(Icons.video_call_outlined),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Video call feature coming soon')),
-              );
-            },
+            onPressed: () => _showVideoCallOptions(),
           ),
         ],
       ),
@@ -353,6 +416,92 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _startVoiceCall() async {
+    try {
+      final currentUid = FirebaseAuth.instance.currentUser!.uid;
+      final conv = await FirestoreService().getConversation(widget.conversationId);
+      final data = conv.data();
+      if (data == null) throw Exception('Conversation not found');
+
+      final List<dynamic> ids = data['participantIds'] ?? [];
+      final otherId = ids.cast<String?>().firstWhere((id) => id != currentUid, orElse: () => null);
+      if (otherId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No recipient found')));
+        return;
+      }
+
+      final userDoc = await FirestoreService().getUser(otherId);
+      final phone = userDoc.data()?['phone'] as String?;
+      if (phone == null || phone.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Recipient has no phone number')));
+        return;
+      }
+
+      final uri = Uri(scheme: 'tel', path: phone);
+      if (!await canLaunchUrl(uri)) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot place call on this device')));
+        return;
+      }
+
+      await launchUrl(uri);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Call failed: $e')));
+    }
+  }
+
+  Future<void> _startVideoCall() async {
+    try {
+      final currentUid = FirebaseAuth.instance.currentUser!.uid;
+      final conv = await FirestoreService().getConversation(widget.conversationId);
+      final data = conv.data();
+      if (data == null) throw Exception('Conversation not found');
+
+      final List<dynamic> ids = data['participantIds'] ?? [];
+      final otherId = ids.cast<String?>().firstWhere((id) => id != currentUid, orElse: () => null);
+      if (otherId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No recipient found')));
+        return;
+      }
+
+      final roomName = 'carelink_${widget.conversationId}';
+      final jitsiUrl = 'https://meet.jitsi.org/$roomName';
+
+      if (await canLaunchUrl(Uri.parse(jitsiUrl))) {
+        await launchUrl(Uri.parse(jitsiUrl), mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch video call')));
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Video call failed: $e')));
+    }
+  }
+
+  void _showVideoCallOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.videocam),
+                title: const Text('Jitsi (via browser)'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _startVideoCall();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
     );
   }
 }

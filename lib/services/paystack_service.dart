@@ -1,4 +1,6 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 
 
 /// Handles initialization, transaction setup, and business logic
@@ -129,12 +131,50 @@ class PaystackService {
       }
 
       print('🔍 Verifying payment with reference: $reference');
-      // TODO: Integrate HTTP call to Firebase Cloud Function
-      // e.g., use `cloud_functions` package or `dio`/`http`
-      return true;
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('verifyTransaction');
+      final result = await callable.call(<String, dynamic>{'reference': reference});
+      final data = result.data as Map<String, dynamic>?;
+      final verified = data != null && (data['verified'] == true || data['status'] == 'verified');
+      print('🔍 verifyPayment result: $data');
+      return verified;
     } catch (e) {
       print('🔥 Paystack Verification Error: $e');
       return false;
+    }
+  }
+
+  /// Request refund for a transaction (calls Cloud Function)
+  Future<bool> initiateRefund(String reference) async {
+    try {
+      print('💰 Initiating refund for reference: $reference');
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('initiateRefund');
+      final result = await callable.call(<String, dynamic>{'reference': reference});
+      final data = result.data as Map<String, dynamic>?;
+      final success = data != null && data['status'] == 'refund_initiated';
+      print('💰 Refund result: $data');
+      return success;
+    } catch (e) {
+      print('🔥 Refund Error: $e');
+      return false;
+    }
+  }
+
+  /// Handle payment failure with logging
+  Future<void> handlePaymentFailure(String reference, String reason) async {
+    try {
+      print('❌ Payment failure: $reference - $reason');
+      // Could log to Firestore for analytics
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('logPaymentFailure');
+      await callable.call(<String, dynamic>{
+        'reference': reference,
+        'reason': reason,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('⚠️ Error logging failure: $e');
     }
   }
 }

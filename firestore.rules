@@ -163,6 +163,107 @@ service cloud.firestore {
       }
     }
 
+    // ========================= CALLS COLLECTION (WebRTC signaling) =========================
+    // Structure:
+    // calls/{callId} -> { callerId, conversationId, offer, answer }
+    // calls/{callId}/callerCandidates/{cid}
+    // calls/{callId}/calleeCandidates/{cid}
+    match /calls/{callId} {
+      // Only conversation participants may create/read/update/delete call docs
+      allow create: if isAuthenticated() &&
+        request.resource.data.conversationId is string &&
+        // ensure caller is the authenticated user
+        request.resource.data.callerId == request.auth.uid &&
+        // ensure the caller is a participant in the conversation referenced
+        exists(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)) &&
+        get(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)).data.participantIds.hasAny([request.auth.uid]);
+
+      allow read: if isAuthenticated() &&
+        resource.data.conversationId is string &&
+        exists(/databases/$(database)/documents/conversations/$(resource.data.conversationId)) &&
+        get(/databases/$(database)/documents/conversations/$(resource.data.conversationId)).data.participantIds.hasAny([request.auth.uid]);
+
+      // Allow updates only by participants; restrict which fields can be written
+      allow update: if isAuthenticated() &&
+        resource.data.conversationId is string &&
+        exists(/databases/$(database)/documents/conversations/$(resource.data.conversationId)) &&
+        get(/databases/$(database)/documents/conversations/$(resource.data.conversationId)).data.participantIds.hasAny([request.auth.uid]) &&
+        // Only allow adding an 'answer' or updating small metadata fields
+        (request.resource.data.keys().hasOnly(['answer']) || request.resource.data.keys().hasOnly(['answer','updatedAt']));
+
+      allow delete: if isAuthenticated() &&
+        resource.data.conversationId is string &&
+        exists(/databases/$(database)/documents/conversations/$(resource.data.conversationId)) &&
+        get(/databases/$(database)/documents/conversations/$(resource.data.conversationId)).data.participantIds.hasAny([request.auth.uid]);
+
+      // callerCandidates subcollection
+      match /callerCandidates/{candidateId} {
+        allow create: if isAuthenticated() &&
+          resource == null &&
+          request.resource.data.uid == request.auth.uid &&
+          // call exists and caller is a participant
+          exists(/databases/$(database)/documents/calls/$(callId)) &&
+          (get(/databases/$(database)/documents/calls/$(callId)).data.callerId == request.auth.uid ||
+           (exists(/databases/$(database)/documents/conversations/$(get(/databases/$(database)/documents/calls/$(callId)).data.conversationId)) &&
+           get(/databases/$(database)/documents/conversations/$(get(/databases/$(database)/documents/calls/$(callId)).data.conversationId)).data.participantIds.hasAny([request.auth.uid])));
+
+        allow read: if isAuthenticated() &&
+          exists(/databases/$(database)/documents/calls/$(callId)) &&
+          exists(/databases/$(database)/documents/conversations/$(get(/databases/$(database)/documents/calls/$(callId)).data.conversationId)) &&
+          get(/databases/$(database)/documents/conversations/$(get(/databases/$(database)/documents/calls/$(callId)).data.conversationId)).data.participantIds.hasAny([request.auth.uid]);
+
+        allow delete: if false;
+      }
+
+      // calleeCandidates subcollection
+      match /calleeCandidates/{candidateId} {
+        allow create: if isAuthenticated() &&
+          resource == null &&
+          request.resource.data.uid == request.auth.uid &&
+          exists(/databases/$(database)/documents/calls/$(callId)) &&
+          exists(/databases/$(database)/documents/conversations/$(get(/databases/$(database)/documents/calls/$(callId)).data.conversationId)) &&
+          get(/databases/$(database)/documents/conversations/$(get(/databases/$(database)/documents/calls/$(callId)).data.conversationId)).data.participantIds.hasAny([request.auth.uid]);
+
+        allow read: if isAuthenticated() &&
+          exists(/databases/$(database)/documents/calls/$(callId)) &&
+          exists(/databases/$(database)/documents/conversations/$(get(/databases/$(database)/documents/calls/$(callId)).data.conversationId)) &&
+          get(/databases/$(database)/documents/conversations/$(get(/databases/$(database)/documents/calls/$(callId)).data.conversationId)).data.participantIds.hasAny([request.auth.uid]);
+
+        allow delete: if false;
+      }
+    }
+
+    // ========================= TRANSACTIONS (payments) =========================
+    // Top-level transactions collection created by clients or server (server uses admin SDK and bypasses rules)
+    match /transactions/{txId} {
+      // Creator (client) or relevant participant (caregiver) may read
+      allow read: if isAuthenticated() && (
+        resource.data.clientId == request.auth.uid || resource.data.caregiverId == request.auth.uid);
+
+      // Clients may create transactions where they are the clientId and required fields exist
+      allow create: if isAuthenticated() &&
+        request.resource.data.clientId == request.auth.uid &&
+        request.resource.data.keys().hasAll(['clientId','caregiverId','amount','platformFee','caregiverEarnings','status','reference']);
+
+      // Allow updates to transaction status by authenticated callers only; server (admin SDK) may also update
+      allow update: if isAuthenticated() && (
+        // allow client or caregiver to update status (e.g., mark refunded) OR admin via admin SDK
+        resource.data.clientId == request.auth.uid || resource.data.caregiverId == request.auth.uid);
+
+      allow delete: if false;
+    }
+
+    // ========================= CAREGIVER WALLETS =========================
+    match /caregiver_wallets/{caregiverId} {
+      // Caregiver can read their own wallet
+      allow read: if isAuthenticated() && request.auth.uid == caregiverId;
+
+      // Creation and updates are typically done by trusted server code (admin SDK). Allow creation by the caregiver as a convenience, but server processes (admin) bypass rules.
+      allow create: if isAuthenticated() && request.auth.uid == caregiverId;
+      allow update: if false; // prevent client-side wallet manipulation
+      allow delete: if false;
+    }
+
     // ========================= DENY ALL OTHER ACCESS =========================
     match /{document=**} {
       allow read, write: if false;

@@ -7,5 +7,10 @@
         "geoflutterfire",
         "paystack"
     ],
-    "java.configuration.updateBuildConfiguration": "automatic"
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "files.associations": {
+        "*.dbclient-js": "javascript",
+        "*.embeddedhtml": "html",
+        "variant": "cpp"
+    }
 }

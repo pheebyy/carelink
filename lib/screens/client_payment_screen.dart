@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'paystack_checkout_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/paystack_service.dart';
 import '../services/payment_firestore_service.dart';
+import 'payment_confirmation_screen.dart';
+import 'payment_history_screen.dart';
 
 class ClientPaymentScreen extends StatefulWidget {
   final String caregiverId;
@@ -155,63 +158,18 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
     double amount,
     Map<String, double> breakdown,
   ) async {
-    return await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Payment'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Pay ${widget.caregiverName}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 16),
-            _buildBreakdownRow(
-              'Base Amount',
-              breakdown['baseAmount']!,
-              Colors.black87,
-            ),
-            _buildBreakdownRow(
-              'Platform Fee (2%)',
-              breakdown['platformFee']!,
-              Colors.orange,
-            ),
-            const Divider(height: 16),
-            _buildBreakdownRow(
-              'You Pay',
-              breakdown['totalAmount']!,
-              Colors.green,
-              isBold: true,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${widget.caregiverName} receives: KES ${breakdown['caregiverEarning']!.toStringAsFixed(2)}',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
+    // Push a full screen confirmation page and return the user's choice
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PaymentConfirmationScreen(
+          amount: amount,
+          breakdown: breakdown,
+          caregiverName: widget.caregiverName,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Pay Now'),
-          ),
-        ],
       ),
-    ) ??
-    false;
+    );
+
+    return result ?? false;
   }
 
   /// Build breakdown row
@@ -240,16 +198,6 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -494,35 +442,45 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
               ),
             ),
 
-            // Pay button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: (_isProcessing || !_isAmountValid()) ? null : _processPayment,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  disabledBackgroundColor: Colors.grey.shade300,
+            // Pay button + View history
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: (_isProcessing || !_isAmountValid()) ? null : _processPayment,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      disabledBackgroundColor: Colors.grey.shade300,
+                    ),
+                    child: _isProcessing
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            'Pay KES ${breakdown['totalAmount']!.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
                 ),
-                              child: _isProcessing
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(Colors.white),
-                                      ),
-                                    )
-                                  : Text(
-                                      'Pay KES ${breakdown['totalAmount']!.toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-              ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PaymentHistoryScreen()),
+                  ),
+                  icon: const Icon(Icons.history),
+                  label: const Text('History'),
+                ),
+              ],
             ),
           ],
         ),
@@ -530,61 +488,66 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
     );
   }
 
-            /// Placeholder: Add card / manage saved payment methods
-            void _onAddCardPressed() {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Add card flow is not implemented yet')),
-              );
-            }
-
   Future<bool> _initiatePaystackCheckout(
     Map<String, dynamic> paymentConfig,
     String reference,
   ) async {
     try {
-      // TODO: Implement Paystack checkout UI integration
-      // This method should:
-      // 1. Use the paystack_payment package to show payment UI
-      // 2. Call PaystackPlugin.initialize() if not already done
-      // 3. Show payment form with amount, email, reference
-      // 4. Handle payment response (success/failure)
-      // 5. For successful payments, call Cloud Function to verify with Paystack
-      // 
-      // Example implementation structure:
-      // final CheckoutResponse response = await PaystackPlugin.checkout(
-      //   context: context,
-      //   secretKey: dotenv.env['PAYSTACK_SECRET_KEY']!,
-      //   reference: reference,
-      //   amount: paymentConfig['amount'], // in Kobo
-      //   email: paymentConfig['email'],
-      //   onClosed: () {
-      //     _showError('Payment cancelled');
-      //   },
-      // );
-      //
-      // if (response.status) {
-      //   // Verify with Cloud Function
-      //   final result = await FirebaseFunctions.instance
-      //       .httpsCallable('verifyTransaction')
-      //       .call({'reference': reference});
-      //   if (result.data['success']) {
-      //     _showSuccess('Payment verified and wallet credited!', '');
-      //   }
-      // } else {
-      //   _showError('Payment failed');
-      // }
+      // Open real Paystack checkout
+      final checkoutResult = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => PaystackCheckoutScreen(
+            paymentConfig: paymentConfig,
+            reference: reference,
+          ),
+        ),
+      );
 
-      // For now, simulate successful payment flow by verifying payment
-      final verified = await _paystackService.verifyPayment(reference);
-
-      if (!verified) {
+      if (checkoutResult != true) {
+        await _paystackService.handlePaymentFailure(reference, 'User cancelled payment');
+        _showError('Payment was cancelled. Tap to retry.', showRetry: true, reference: reference);
         return false;
       }
 
-      return true;
+      // Verify with backend Cloud Function
+      final verified = await _paystackService.verifyPayment(reference);
+      if (!verified) {
+        await _paystackService.handlePaymentFailure(reference, 'Verification failed');
+        _showError('Payment verification failed. Tap to retry.', showRetry: true, reference: reference);
+      }
+      return verified;
     } catch (e) {
-      _showError('Paystack error: $e');
+      await _paystackService.handlePaymentFailure(reference, e.toString());
+      _showError('Paystack error: $e. Tap to retry.', showRetry: true, reference: reference);
       return false;
     }
+  }
+
+  void _showError(
+    String message, {
+    bool showRetry = false,
+    String? reference,
+  }) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 5),
+        action: showRetry && reference != null
+            ? SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: () => _processPayment(),
+              )
+            : null,
+      ),
+    );
+  }
+
+  /// Placeholder: Add card / manage saved payment methods
+  void _onAddCardPressed() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Add card flow is not implemented yet')),
+    );
   }
 }
