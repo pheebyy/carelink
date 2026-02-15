@@ -1,5 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'azure_communication_service.dart';
 
 
 
@@ -9,6 +10,7 @@ class PaystackService {
 
   late String _publicKey;
   bool _initialized = false;
+  final _azureComm = AzureCommunicationService();
 
   PaystackService._internal();
 
@@ -48,6 +50,196 @@ class PaystackService {
 
   /// Premium subscription price — fixed at KSh 300
   double getPremiumPriceKES() => 300.0;
+
+  // ================================
+  // 💳 PAYMENT CHANNELS
+  // ================================
+
+  /// Get available payment channels for Kenya
+  List<String> getAvailablePaymentChannels() {
+    return ['card', 'mobile_money', 'bank'];
+  }
+
+  /// Get payment configuration with specific channel (Card, M-Pesa, etc.)
+  Map<String, dynamic> getPaymentConfigWithChannel({
+    required String email,
+    required double amount,
+    required String channel, // 'card', 'mobile_money', 'bank'
+    String? reference,
+    String type = "client_payment",
+    Map<String, dynamic>? metadata,
+  }) {
+    final config = getPaymentConfig(
+      email: email,
+      amount: amount,
+      reference: reference,
+      type: type,
+      metadata: metadata,
+    );
+
+    // Add channel-specific configuration
+    config['channels'] = [channel];
+    
+    if (channel == 'mobile_money') {
+      config['metadata']['payment_method'] = 'M-Pesa';
+      config['metadata']['mobile_money_provider'] = 'mpesa';
+      print('📱 M-Pesa payment channel selected');
+    } else if (channel == 'card') {
+      config['metadata']['payment_method'] = 'Card';
+      print('💳 Card payment channel selected');
+    } else if (channel == 'bank') {
+      config['metadata']['payment_method'] = 'Bank Transfer';
+      print('🏦 Bank transfer channel selected');
+    }
+
+    return config;
+  }
+
+  /// Initialize M-Pesa payment
+  Future<Map<String, dynamic>?> initializeMpesaPayment({
+    required String email,
+    required double amount,
+    required String phoneNumber, // Format: 254XXXXXXXXX
+    String? reference,
+    String type = "client_payment",
+  }) async {
+    try {
+      print('📱 Initializing M-Pesa payment for $phoneNumber');
+      
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('initializeMpesaPayment');
+      
+      final result = await callable.call(<String, dynamic>{
+        'email': email,
+        'amount': amount,
+        'phoneNumber': phoneNumber,
+        'reference': reference ?? 'mpesa_${DateTime.now().millisecondsSinceEpoch}',
+        'type': type,
+      });
+      
+      final data = result.data as Map<String, dynamic>?;
+      print('✅ M-Pesa payment initialized: $data');
+      return data;
+    } catch (e) {
+      print('🔥 M-Pesa initialization error: $e');
+      return null;
+    }
+  }
+
+  // ================================
+  // 💳 CARD MANAGEMENT
+  // ================================
+
+  /// Save card authorization for future payments
+  Future<bool> saveCardAuthorization({
+    required String userId,
+    required String authorizationCode,
+    required String cardType,
+    required String last4,
+    required String expiryMonth,
+    required String expiryYear,
+    required String bin,
+  }) async {
+    try {
+      print('💾 Saving card authorization for user: $userId');
+      
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('saveCardAuthorization');
+      
+      final result = await callable.call(<String, dynamic>{
+        'userId': userId,
+        'authorizationCode': authorizationCode,
+        'cardType': cardType,
+        'last4': last4,
+        'expiryMonth': expiryMonth,
+        'expiryYear': expiryYear,
+        'bin': bin,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+      
+      final success = result.data?['success'] == true;
+      print(success ? '✅ Card saved successfully' : '❌ Failed to save card');
+      return success;
+    } catch (e) {
+      print('🔥 Error saving card: $e');
+      return false;
+    }
+  }
+
+  /// Get saved cards for a user
+  Future<List<Map<String, dynamic>>> getSavedCards(String userId) async {
+    try {
+      print('🔍 Fetching saved cards for user: $userId');
+      
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('getSavedCards');
+      
+      final result = await callable.call(<String, dynamic>{'userId': userId});
+      
+      final cards = List<Map<String, dynamic>>.from(result.data?['cards'] ?? []);
+      print('✅ Found ${cards.length} saved cards');
+      return cards;
+    } catch (e) {
+      print('🔥 Error fetching cards: $e');
+      return [];
+    }
+  }
+
+  /// Delete a saved card
+  Future<bool> deleteSavedCard({
+    required String userId,
+    required String cardId,
+  }) async {
+    try {
+      print('🗑️ Deleting card: $cardId');
+      
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('deleteSavedCard');
+      
+      final result = await callable.call(<String, dynamic>{
+        'userId': userId,
+        'cardId': cardId,
+      });
+      
+      final success = result.data?['success'] == true;
+      print(success ? '✅ Card deleted' : '❌ Failed to delete card');
+      return success;
+    } catch (e) {
+      print('🔥 Error deleting card: $e');
+      return false;
+    }
+  }
+
+  /// Charge a saved card
+  Future<Map<String, dynamic>?> chargeSavedCard({
+    required String userId,
+    required String authorizationCode,
+    required double amount,
+    String? reference,
+    String type = "client_payment",
+  }) async {
+    try {
+      print('💳 Charging saved card...');
+      
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('chargeSavedCard');
+      
+      final result = await callable.call(<String, dynamic>{
+        'userId': userId,
+        'authorizationCode': authorizationCode,
+        'amount': amount,
+        'reference': reference ?? 'card_${DateTime.now().millisecondsSinceEpoch}',
+        'type': type,
+      });
+      
+      final data = result.data as Map<String, dynamic>?;
+      print('✅ Card charge result: $data');
+      return data;
+    } catch (e) {
+      print('🔥 Error charging card: $e');
+      return null;
+    }
+  }
 
   /// ================================
   /// 💰 PAYMENT CONFIGURATION
@@ -124,7 +316,7 @@ class PaystackService {
   ///
   /// The function checks Paystack, computes commissions, and updates Firestore.
   ///
-  Future<bool> verifyPayment(String reference) async {
+  Future<bool> verifyPayment(String reference, {String? userId, String? role}) async {
     try {
       if (!_initialized) {
         throw Exception('Paystack not initialized');
@@ -133,9 +325,29 @@ class PaystackService {
       print('🔍 Verifying payment with reference: $reference');
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('verifyTransaction');
-      final result = await callable.call(<String, dynamic>{'reference': reference});
+      final result = await callable.call(<String, dynamic>{
+        'reference': reference,
+        'userId': userId ?? 'unknown',
+        'role': role ?? 'client',
+      });
       final data = result.data as Map<String, dynamic>?;
       final verified = data != null && (data['verified'] == true || data['status'] == 'verified');
+      
+      // Send SMS notification if payment verified and Azure is initialized
+      if (verified && _azureComm.isInitialized) {
+        try {
+          await _azureComm.sendPaymentConfirmation(
+            phone: data['phone'] ?? '',
+            recipientName: data['name'] ?? 'Customer',
+            amount: (data['amount'] ?? 0.0).toDouble(),
+            reference: reference,
+          );
+          print('📱 Payment confirmation SMS sent');
+        } catch (smsError) {
+          print('⚠️ SMS notification failed but payment verified: $smsError');
+        }
+      }
+      
       print('🔍 verifyPayment result: $data');
       return verified;
     } catch (e) {

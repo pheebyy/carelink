@@ -1,4 +1,6 @@
-const functions = require("firebase-functions");
+const functions = require("firebase-functions/v2");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onCall } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const axios = require("axios");
 require("dotenv").config(); // ✅ Load .env variables
@@ -8,6 +10,49 @@ const db = admin.firestore();
 
 // ✅ Securely load Paystack key from .env
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+
+// 🔹 Initialize Paystack Transaction
+exports.initializeTransaction = onCall(async (request) => {
+  const { email, amount, reference, channels, metadata } = request.data;
+
+  if (!email || !amount || !reference) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing required parameters: email, amount, or reference."
+    );
+  }
+
+  try {
+    const url = "https://api.paystack.co/transaction/initialize";
+    const headers = {
+      Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+      "Content-Type": "application/json",
+    };
+
+    const payload = {
+      email,
+      amount: amount, // Already in kobo from Flutter (amount * 100)
+      reference,
+      currency: "KES",
+      channels: channels || ["card", "mobile_money"],
+      metadata: metadata || {},
+    };
+
+    const response = await axios.post(url, payload, { headers });
+    
+    return {
+      status: true,
+      message: "Transaction initialized successfully",
+      data: response.data.data,
+    };
+  } catch (error) {
+    console.error("Error initializing transaction:", error.response?.data || error.message);
+    throw new functions.https.HttpsError(
+      "internal",
+      error.response?.data?.message || "Failed to initialize transaction"
+    );
+  }
+});
 
 // 🔹 Verify Paystack Transaction
 async function verifyPaystackPayment(reference) {
@@ -21,8 +66,8 @@ async function verifyPaystackPayment(reference) {
 }
 
 // 🔹 Main Firebase Function
-exports.verifyTransaction = functions.https.onCall(async (data, context) => {
-  const { reference, userId, role } = data;
+exports.verifyTransaction = onCall(async (request) => {
+  const { reference, userId, role } = request.data;
 
   if (!reference || !userId) {
     throw new functions.https.HttpsError(
@@ -39,15 +84,15 @@ exports.verifyTransaction = functions.https.onCall(async (data, context) => {
       throw new Error("Transaction not successful.");
     }
 
-    // Convert from Kobo → NGN → KES
-    const amountKobo = verification.data.amount;
-    const amountNGN = amountKobo / 100;
-    const conversionRate = 0.67; // Example: 1 NGN ≈ 0.67 KES
-    const amountKES = amountNGN * conversionRate;
+    // Amount is in cents (KES * 100)
+    const amountCents = verification.data.amount;
+    const amountKES = amountCents / 100;
+    const paymentMetadata = verification.data.metadata || {};
+    const paymentType = paymentMetadata.type || "client_payment";
 
     // Carelink Commission Model
-    const caregiverCommission = amountKES * 0.15;
-    const clientFee = amountKES * 0.02;
+    const caregiverCommission = amountKES * 0.05; // 5% from caregiver
+    const clientFee = amountKES * 0.02; // 2% from client
     const totalRevenue = caregiverCommission + clientFee;
 
     // Save transaction record
@@ -60,6 +105,8 @@ exports.verifyTransaction = functions.https.onCall(async (data, context) => {
       clientFee,
       totalRevenue,
       status,
+      paymentType,
+      paystackData: verification.data,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -75,8 +122,12 @@ exports.verifyTransaction = functions.https.onCall(async (data, context) => {
     }
 
     return {
+      verified: true,
+      status: "verified",
       success: true,
       message: "Transaction verified successfully.",
+      amount: amountKES,
+      reference: reference,
       data: {
         amountKES,
         caregiverCommission,
@@ -95,10 +146,16 @@ exports.verifyTransaction = functions.https.onCall(async (data, context) => {
 });
 
 // 🔔 Send push notification when a new message is created
-exports.onNewMessage = functions.firestore
-  .document("conversations/{conversationId}/messages/{messageId}")
-  .onCreate(async (snapshot, context) => {
-    const { conversationId, messageId } = context.params;
+exports.onNewMessage = onDocumentCreated(
+  "conversations/{conversationId}/messages/{messageId}",
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) {
+      console.log("No data associated with the event");
+      return;
+    }
+    
+    const { conversationId, messageId } = event.params;
     const messageData = snapshot.data();
     const senderId = messageData.senderId;
     const messageText = messageData.text || "";
@@ -196,4 +253,5 @@ exports.onNewMessage = functions.firestore
       console.error("❌ Error sending push notification:", error);
       return null;
     }
-  });
+  }
+);

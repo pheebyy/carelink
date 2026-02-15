@@ -4,7 +4,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
+import 'screens/azure_test_screen.dart';
+import 'screens/payment_example_screen.dart';
 import 'services/notification_service.dart';
+import 'services/azure_communication_service.dart';
+import 'services/paystack_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,13 +33,12 @@ Future<void> main() async {
     
     // Initialize notification service (Spark plan - client-side only)
     await NotificationService.instance.init();
-    // Validates Paystack 
-    final paystackPublicKey = dotenv.env['PAYSTACK_PUBLIC_KEY'];
-    if (paystackPublicKey != null && paystackPublicKey.isNotEmpty) {
-      print(' Paystack initialized with public key');
-    } else {
-      print(' Warning: Paystack public key not found in .env file');
-    }
+    
+    // Initialize Paystack Service
+    PaystackService().initialize();
+    
+    // Initialize Azure Communication Service
+    AzureCommunicationService().initialize();
   } catch (e) {
     print(' Initialization error: $e');
   }
@@ -63,6 +66,8 @@ class CareLinkApp extends StatelessWidget {
       routes: {
         '/': (context) => const LoginScreen(),
         '/login': (context) => const LoginScreen(),
+        '/azure-test': (context) => const AzureTestScreen(),
+        '/payment-demo': (context) => const PaymentExampleScreen(),
       },
     );
   }
