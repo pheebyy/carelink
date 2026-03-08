@@ -21,13 +21,13 @@ class PaystackService {
     _publicKey = dotenv.env['PAYSTACK_PUBLIC_KEY'] ?? '';
 
     if (_publicKey.isEmpty) {
-      print('⚠️ Warning: Paystack public key not found in .env file');
+      print(' Warning: Paystack public key not found in .env file');
       _initialized = false;
       return;
     }
 
     _initialized = true;
-    print('✅ Paystack Service initialized successfully with KES currency');
+    print(' Paystack Service initialized successfully with KES currency');
   }
 
   /// Public getters
@@ -35,7 +35,7 @@ class PaystackService {
   bool get isInitialized => _initialized;
 
   // ================================
-  // 💼 CARELINK BUSINESS MODEL LOGIC
+  //  CARELINK BUSINESS MODEL LOGIC
   // ================================
 
   /// Commission charged from caregiver (default 5%)
@@ -52,7 +52,7 @@ class PaystackService {
   double getPremiumPriceKES() => 300.0;
 
   // ================================
-  // 💳 PAYMENT CHANNELS
+  //  PAYMENT CHANNELS
   // ================================
 
   /// Get available payment channels for Kenya
@@ -83,13 +83,13 @@ class PaystackService {
     if (channel == 'mobile_money') {
       config['metadata']['payment_method'] = 'M-Pesa';
       config['metadata']['mobile_money_provider'] = 'mpesa';
-      print('📱 M-Pesa payment channel selected');
+      print(' M-Pesa payment channel selected');
     } else if (channel == 'card') {
       config['metadata']['payment_method'] = 'Card';
-      print('💳 Card payment channel selected');
+      print(' Card payment channel selected');
     } else if (channel == 'bank') {
       config['metadata']['payment_method'] = 'Bank Transfer';
-      print('🏦 Bank transfer channel selected');
+      print(' Bank transfer channel selected');
     }
 
     return config;
@@ -104,30 +104,32 @@ class PaystackService {
     String type = "client_payment",
   }) async {
     try {
-      print('📱 Initializing M-Pesa payment for $phoneNumber');
-      
+      print(' Initializing M-Pesa payment for $phoneNumber');
+
+      final resolvedReference = reference ?? generateUniqueReference('mpesa');
+
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('initializeMpesaPayment');
-      
+
       final result = await callable.call(<String, dynamic>{
         'email': email,
         'amount': amount,
         'phoneNumber': phoneNumber,
-        'reference': reference ?? 'mpesa_${DateTime.now().millisecondsSinceEpoch}',
+        'reference': resolvedReference,
         'type': type,
       });
-      
+
       final data = result.data as Map<String, dynamic>?;
-      print('✅ M-Pesa payment initialized: $data');
+      print(' M-Pesa payment initialized: $data');
       return data;
     } catch (e) {
-      print('🔥 M-Pesa initialization error: $e');
+      print(' M-Pesa initialization error: $e');
       return null;
     }
   }
 
   // ================================
-  // 💳 CARD MANAGEMENT
+  //  CARD MANAGEMENT
   // ================================
 
   /// Save card authorization for future payments
@@ -141,7 +143,7 @@ class PaystackService {
     required String bin,
   }) async {
     try {
-      print('💾 Saving card authorization for user: $userId');
+      print(' Saving card authorization for user: $userId');
       
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('saveCardAuthorization');
@@ -158,10 +160,10 @@ class PaystackService {
       });
       
       final success = result.data?['success'] == true;
-      print(success ? '✅ Card saved successfully' : '❌ Failed to save card');
+      print(success ? ' Card saved successfully' : ' Failed to save card');
       return success;
     } catch (e) {
-      print('🔥 Error saving card: $e');
+      print(' Error saving card: $e');
       return false;
     }
   }
@@ -169,7 +171,7 @@ class PaystackService {
   /// Get saved cards for a user
   Future<List<Map<String, dynamic>>> getSavedCards(String userId) async {
     try {
-      print('🔍 Fetching saved cards for user: $userId');
+      print(' Fetching saved cards for user: $userId');
       
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('getSavedCards');
@@ -177,10 +179,10 @@ class PaystackService {
       final result = await callable.call(<String, dynamic>{'userId': userId});
       
       final cards = List<Map<String, dynamic>>.from(result.data?['cards'] ?? []);
-      print('✅ Found ${cards.length} saved cards');
+      print(' Found ${cards.length} saved cards');
       return cards;
     } catch (e) {
-      print('🔥 Error fetching cards: $e');
+      print(' Error fetching cards: $e');
       return [];
     }
   }
@@ -191,7 +193,7 @@ class PaystackService {
     required String cardId,
   }) async {
     try {
-      print('🗑️ Deleting card: $cardId');
+      print(' Deleting card: $cardId');
       
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('deleteSavedCard');
@@ -202,10 +204,10 @@ class PaystackService {
       });
       
       final success = result.data?['success'] == true;
-      print(success ? '✅ Card deleted' : '❌ Failed to delete card');
+      print(success ? ' Card deleted' : ' Failed to delete card');
       return success;
     } catch (e) {
-      print('🔥 Error deleting card: $e');
+      print(' Error deleting card: $e');
       return false;
     }
   }
@@ -220,18 +222,20 @@ class PaystackService {
   }) async {
     try {
       print('💳 Charging saved card...');
-      
+
+      final resolvedReference = reference ?? generateUniqueReference('card');
+
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('chargeSavedCard');
-      
+
       final result = await callable.call(<String, dynamic>{
         'userId': userId,
         'authorizationCode': authorizationCode,
         'amount': amount,
-        'reference': reference ?? 'card_${DateTime.now().millisecondsSinceEpoch}',
+        'reference': resolvedReference,
         'type': type,
       });
-      
+
       final data = result.data as Map<String, dynamic>?;
       print('✅ Card charge result: $data');
       return data;
@@ -290,10 +294,13 @@ class PaystackService {
     // Paystack expects amount * 100 (in lowest currency unit)
     final amountInKobo = (finalAmount * 100).toInt();
 
+    // Always generate a unique reference if not provided
+    final ref = reference ?? generateUniqueReference('carelink');
+
     return {
       'email': email,
       'amount': amountInKobo,
-      'reference': reference ?? 'carelink_${DateTime.now().millisecondsSinceEpoch}',
+      'reference': ref,
       'publicKey': _publicKey,
       'currency': 'KES',
       'metadata': {
@@ -305,6 +312,11 @@ class PaystackService {
         ...?metadata,
       },
     };
+  }
+
+  /// Utility to generate a unique reference
+  String generateUniqueReference(String prefix) {
+    return '${prefix}_${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}';
   }
 
   // ================================
@@ -389,4 +401,13 @@ class PaystackService {
       print('⚠️ Error logging failure: $e');
     }
   }
+
+  // Example: Add a check before starting a transaction (pseudo-code, depends on your backend)
+  // You can call this before initializing a payment
+  Future<bool> isReferenceValid(String reference) async {
+    return true; // Placeholder
+  }
+
+  // Removed invalid class-level example:
+  // final ref = reference ?? generateUniqueReference('mpesa');
 }
