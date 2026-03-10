@@ -14,9 +14,9 @@ class PaymentFirestoreService {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      // Calculate caregiver earnings (95% of amount, 5% platform fee)
-      final platformFee = amount * 0.05;
-      final caregiverEarnings = amount - platformFee;
+      // Client flow charges platform fee on top of base amount.
+      final platformFee = amount * 0.02;
+      final caregiverEarnings = amount;
 
       final transaction = PaymentTransaction(
         id: reference,
@@ -72,6 +72,12 @@ class PaymentFirestoreService {
         reference,
         transactionDoc.data()!,
       );
+
+      // Idempotency guard: avoid double wallet credit if completion is retried.
+      if (transaction.status == 'completed') {
+        print('ℹ️ Transaction already completed: $reference');
+        return;
+      }
 
       // Update transaction status
       await updateTransactionStatus(

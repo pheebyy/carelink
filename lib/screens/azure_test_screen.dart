@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/azure_communication_service.dart';
 
-/// Test screen for Azure Communication Service
+// Test screen for Azure Communication Service
 class AzureTestScreen extends StatefulWidget {
   const AzureTestScreen({super.key});
 
@@ -96,35 +96,35 @@ class _AzureTestScreenState extends State<AzureTestScreen> {
             const SizedBox(height: 12),
 
             _buildTestButton(
-              label: '📅 Test Booking Notification',
+              label: ' Test Booking Notification',
               color: Colors.blue,
               onPressed: _testBookingNotification,
             ),
             const SizedBox(height: 8),
 
             _buildTestButton(
-              label: '💰 Test Payment Confirmation',
+              label: ' Test Payment Confirmation',
               color: Colors.green,
               onPressed: _testPaymentConfirmation,
             ),
             const SizedBox(height: 8),
 
             _buildTestButton(
-              label: '⏰ Test Booking Reminder',
+              label: ' Test Booking Reminder',
               color: Colors.orange,
               onPressed: _testBookingReminder,
             ),
             const SizedBox(height: 8),
 
             _buildTestButton(
-              label: '🔐 Test Verification Code',
+              label: ' Test Verification Code',
               color: Colors.purple,
               onPressed: _testVerificationCode,
             ),
             const SizedBox(height: 8),
 
             _buildTestButton(
-              label: '📱 Test Generic SMS',
+              label: ' Test Generic SMS',
               color: Colors.teal,
               onPressed: _testGenericSMS,
             ),
@@ -216,8 +216,8 @@ class _AzureTestScreenState extends State<AzureTestScreen> {
     setState(() {
       _isSending = false;
       _statusMessage = success
-          ? '✅ Booking notification sent successfully!'
-          : '❌ Failed to send notification. Check console logs.';
+          ? ' Booking notification sent successfully!'
+          : ' Failed to send notification. Check console logs.';
     });
   }
 
@@ -237,8 +237,8 @@ class _AzureTestScreenState extends State<AzureTestScreen> {
     setState(() {
       _isSending = false;
       _statusMessage = success
-          ? '✅ Payment confirmation sent successfully!'
-          : '❌ Failed to send confirmation. Check console logs.';
+          ? ' Payment confirmation sent successfully!'
+          : ' Failed to send confirmation. Check console logs.';
     });
   }
 
@@ -258,8 +258,8 @@ class _AzureTestScreenState extends State<AzureTestScreen> {
     setState(() {
       _isSending = false;
       _statusMessage = success
-          ? '✅ Booking reminder sent successfully!'
-          : '❌ Failed to send reminder. Check console logs.';
+          ? ' Booking reminder sent successfully!'
+          : ' Failed to send reminder. Check console logs.';
     });
   }
 

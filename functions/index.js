@@ -84,31 +84,44 @@ exports.verifyTransaction = onCall(async (request) => {
       throw new Error("Transaction not successful.");
     }
 
-    // Amount is in cents (KES * 100)
+    // Amount from Paystack is in lowest unit (KES * 100)
     const amountCents = verification.data.amount;
     const amountKES = amountCents / 100;
     const paymentMetadata = verification.data.metadata || {};
     const paymentType = paymentMetadata.type || "client_payment";
 
+    // Prefer metadata values emitted by the app to avoid fee-model drift.
+    const baseAmountKES = Number(paymentMetadata.base_amount || amountKES);
+    const finalAmountKES = Number(paymentMetadata.final_amount || amountKES);
+
     // Carelink Commission Model
-    const caregiverCommission = amountKES * 0.05; // 5% from caregiver
-    const clientFee = amountKES * 0.02; // 2% from client
+    const caregiverCommission =
+      paymentType === "caregiver_commission" ? finalAmountKES : 0;
+    const clientFee = Math.max(0, finalAmountKES - baseAmountKES);
     const totalRevenue = caregiverCommission + clientFee;
 
-    // Save transaction record
-    await db.collection("transactions").doc(reference).set({
-      userId,
-      role,
-      reference,
-      amountKES,
-      caregiverCommission,
-      clientFee,
-      totalRevenue,
-      status,
-      paymentType,
-      paystackData: verification.data,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    const normalizedUserId = userId && userId !== "unknown" ? userId : null;
+    const normalizedRole = role && role !== "unknown" ? role : null;
+
+    // Save verification details without overwriting existing transaction fields.
+    await db.collection("transactions").doc(reference).set(
+      {
+        ...(normalizedUserId ? { userId: normalizedUserId } : {}),
+        ...(normalizedRole ? { role: normalizedRole } : {}),
+        reference,
+        amountKES,
+        baseAmountKES,
+        finalAmountKES,
+        caregiverCommission,
+        clientFee,
+        totalRevenue,
+        status,
+        paymentType,
+        paystackData: verification.data,
+        verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
 
     // Premium Activation (KSh 300)
     if (role === "caregiver" && amountKES >= 300) {
@@ -130,6 +143,8 @@ exports.verifyTransaction = onCall(async (request) => {
       reference: reference,
       data: {
         amountKES,
+        baseAmountKES,
+        finalAmountKES,
         caregiverCommission,
         clientFee,
         totalRevenue,
@@ -141,6 +156,35 @@ exports.verifyTransaction = onCall(async (request) => {
     throw new functions.https.HttpsError(
       "internal",
       "Payment verification failed."
+    );
+  }
+});
+
+// 🔹 Log payment failures for support and retry diagnostics
+exports.logPaymentFailure = onCall(async (request) => {
+  const { reference, reason, timestamp } = request.data || {};
+
+  if (!reference || !reason) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing reference or reason."
+    );
+  }
+
+  try {
+    await db.collection("payment_failures").add({
+      reference,
+      reason,
+      timestamp: timestamp || new Date().toISOString(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error logging payment failure:", error.message);
+    throw new functions.https.HttpsError(
+      "internal",
+      "Failed to log payment failure."
     );
   }
 });

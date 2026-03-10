@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:paystack_payment/paystack_payment.dart';
 import '../services/paystack_service.dart';
 
-/// Paystack checkout screen using web redirect.
-/// Falls back to simulated checkout if web launch fails.
 class PaystackCheckoutScreen extends StatefulWidget {
   final Map<String, dynamic> paymentConfig;
   final String reference;
@@ -19,98 +18,79 @@ class PaystackCheckoutScreen extends StatefulWidget {
 }
 
 class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
-  bool _isProcessing = false;
-  late PaystackService _paystackService;
+  final _paystackService = PaystackService();
+  final _paystackPlugin = PaystackPayment();
+  bool _isProcessing = true;
 
   @override
   void initState() {
     super.initState();
-    _paystackService = PaystackService();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _launchPaystackCheckout();
+      _startPaystackCheckout();
     });
   }
 
-  void _launchPaystackCheckout() async {
+  void _startPaystackCheckout() async {
     try {
       setState(() => _isProcessing = true);
 
-      // Configuration values (would be used for web redirect in production)
-      // final publicKey = widget.paymentConfig['publicKey'] as String? ?? '';
-      // final amount = widget.paymentConfig['amount'] as int? ?? 0;
-      // final email = widget.paymentConfig['email'] as String? ?? '';
+      final publicKey = widget.paymentConfig['publicKey'] as String? ?? '';
+      final amountInKobo = widget.paymentConfig['amount'] as int? ?? 0;
+      final email = widget.paymentConfig['email'] as String? ?? '';
+      final accessCode = widget.paymentConfig['accessCode'] as String? ?? '';
 
-      // Build Paystack hosted checkout URL
-      // Note: This requires the transaction to be initialized on the backend first
-      final checkoutUrl = 'https://checkout.paystack.com/';
-
-      // In production, the backend should return an access_code
-      // For now, simulate or redirect to a checkout page
-      final accessCode = 'accs_xyz123'; // Placeholder
-
-      final url = Uri.parse('$checkoutUrl$accessCode');
-
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-
-        // In a real app, you'd poll the backend to verify payment status
-        // For now, simulate success after delay
-        await Future.delayed(const Duration(seconds: 5));
-
-        if (mounted) {
-          // Simulate verification
-          final verified = await _paystackService.verifyPayment(widget.reference);
-          if (verified) {
-            Navigator.of(context).pop(true);
-          } else {
-            _showErrorAndReturn('Payment verification failed');
-          }
-        }
-      } else {
-        // Fallback to simulated checkout UI
-        _showSimulatedCheckout();
+      if (publicKey.isEmpty || amountInKobo <= 0 || email.isEmpty || accessCode.isEmpty) {
+        _showErrorAndReturn('Invalid payment configuration');
+        return;
       }
+
+      // Checkout using the Paystack plugin with callbacks
+      _paystackPlugin.checkout(
+        context: context,
+        accessCode: accessCode,
+        onSuccess: (info) {
+          // Payment succeeded, verify with backend
+          _verifyPaymentOnSuccess();
+        },
+        onError: (error) {
+          // Payment failed
+          if (mounted) {
+            _showErrorAndReturn('Payment error: $error');
+          }
+        },
+        onCancel: (response) {
+          // Payment cancelled
+          if (mounted) {
+            _showErrorAndReturn('Payment was cancelled');
+          }
+        },
+      );
     } catch (e) {
-      print('🔥 Exception during checkout: $e');
-      _showSimulatedCheckout();
+      print(' Checkout error: $e');
+      if (mounted) {
+        _showErrorAndReturn('Payment error: ${e.toString()}');
+      }
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
-  void _showSimulatedCheckout() {
-    // Show simulated payment UI as fallback
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        title: const Text('Simulated Checkout'),
-        content: const Text(
-          'For testing: Use test card 4111 1111 1111 1111\n\n'
-          'This simulates a successful payment for demo purposes.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              if (mounted) {
-                _showErrorAndReturn('Payment cancelled');
-              }
-            },
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              if (mounted) {
-                Navigator.of(context).pop(true);
-              }
-            },
-            child: const Text('Confirm Payment'),
-          ),
-        ],
-      ),
+  Future<void> _verifyPaymentOnSuccess() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final verified = await _paystackService.verifyPayment(
+      widget.reference,
+      userId: user?.uid,
+      role: 'client',
     );
+    if (!mounted) return;
+
+    if (verified) {
+      Navigator.of(context).pop(true);
+    } else {
+      _showErrorAndReturn('Payment verification failed. Please contact support.');
+    }
   }
 
   void _showErrorAndReturn(String message) {
@@ -162,33 +142,6 @@ class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
                     Text(
                       'Redirecting to payment gateway...',
                       style: TextStyle(color: Colors.grey.shade600),
-                    ),
-                    const SizedBox(height: 16),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          children: [
-                            const Text('Amount'),
-                            Text(
-                              'KES $amountKES',
-                              style: const TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Reference: ${widget.reference}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
                   ],
                 ),

@@ -237,16 +237,16 @@ class PaystackService {
       });
 
       final data = result.data as Map<String, dynamic>?;
-      print('✅ Card charge result: $data');
+      print(' Card charge result: $data');
       return data;
     } catch (e) {
-      print('🔥 Error charging card: $e');
+      print(' Error charging card: $e');
       return null;
     }
   }
 
   /// ================================
-  /// 💰 PAYMENT CONFIGURATION
+  /// PAYMENT CONFIGURATION
   /// ================================
 
   /// Builds a payment configuration for Paystack checkout
@@ -273,22 +273,22 @@ class PaystackService {
       case "client_payment":
         final fee = calculateClientFee(amount);
         finalAmount = amount + fee;
-        print('💰 Client fee (2%) added: KSh ${fee.toStringAsFixed(2)}');
+        print(' Client fee (2%) added: KSh ${fee.toStringAsFixed(2)}');
         break;
 
       case "caregiver_commission":
         final commission = calculateCaregiverCommission(amount);
         finalAmount = commission;
-        print('💼 Caregiver commission (5%): KSh ${commission.toStringAsFixed(2)}');
+        print(' Caregiver commission (5%): KSh ${commission.toStringAsFixed(2)}');
         break;
 
       case "premium_subscription":
         finalAmount = getPremiumPriceKES();
-        print('⭐ Premium subscription set at KSh ${finalAmount.toStringAsFixed(2)}');
+        print(' Premium subscription set at KSh ${finalAmount.toStringAsFixed(2)}');
         break;
 
       default:
-        print('⚠️ Unknown payment type, using base amount only.');
+        print(' Unknown payment type, using base amount only.');
     }
 
     // Paystack expects amount * 100 (in lowest currency unit)
@@ -354,16 +354,16 @@ class PaystackService {
             amount: (data['amount'] ?? 0.0).toDouble(),
             reference: reference,
           );
-          print('📱 Payment confirmation SMS sent');
+          print('Payment confirmation SMS sent');
         } catch (smsError) {
-          print('⚠️ SMS notification failed but payment verified: $smsError');
+          print(' SMS notification failed but payment verified: $smsError');
         }
       }
       
-      print('🔍 verifyPayment result: $data');
+      print('verifyPayment result: $data');
       return verified;
     } catch (e) {
-      print('🔥 Paystack Verification Error: $e');
+      print(' Paystack Verification Error: $e');
       return false;
     }
   }
@@ -371,16 +371,16 @@ class PaystackService {
   /// Request refund for a transaction (calls Cloud Function)
   Future<bool> initiateRefund(String reference) async {
     try {
-      print('💰 Initiating refund for reference: $reference');
+      print(' Initiating refund for reference: $reference');
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('initiateRefund');
       final result = await callable.call(<String, dynamic>{'reference': reference});
       final data = result.data as Map<String, dynamic>?;
       final success = data != null && data['status'] == 'refund_initiated';
-      print('💰 Refund result: $data');
+      print(' Refund result: $data');
       return success;
     } catch (e) {
-      print('🔥 Refund Error: $e');
+      print(' Refund Error: $e');
       return false;
     }
   }
@@ -388,7 +388,7 @@ class PaystackService {
   /// Handle payment failure with logging
   Future<void> handlePaymentFailure(String reference, String reason) async {
     try {
-      print('❌ Payment failure: $reference - $reason');
+      print(' Payment failure: $reference - $reason');
       // Could log to Firestore for analytics
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('logPaymentFailure');
@@ -398,7 +398,7 @@ class PaystackService {
         'timestamp': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print('⚠️ Error logging failure: $e');
+      print('Error logging failure: $e');
     }
   }
 

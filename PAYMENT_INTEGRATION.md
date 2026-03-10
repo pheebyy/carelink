@@ -1,4 +1,4 @@
-# 💳 Carelink Payment Integration Guide
+# Carelink Payment Integration Guide
 
 ## Overview
 This enhanced payment system provides a seamless payment experience with support for:
@@ -9,7 +9,7 @@ This enhanced payment system provides a seamless payment experience with support
 
 ---
 
-## 🚀 Features
+##  Features
 
 ### 1. Payment Method Selection
 - Modern UI with card selection
@@ -37,7 +37,7 @@ This enhanced payment system provides a seamless payment experience with support
 
 ---
 
-## 📱 How to Use
+##  How to Use
 
 ### Basic Integration
 
@@ -78,7 +78,7 @@ paymentType: 'premium_subscription'
 
 ---
 
-## 🎨 UI Screens
+##  UI Screens
 
 ### 1. Payment Method Screen
 - Displays total amount with fees
@@ -297,7 +297,7 @@ if (verified && _azureComm.isInitialized) {
 
 ---
 
-## 🎯 Quick Start Checklist
+##  Quick Start Checklist
 
 - [ ] Add Paystack keys to `.env`
 - [ ] Deploy Firebase Cloud Functions
@@ -310,7 +310,7 @@ if (verified && _azureComm.isInitialized) {
 
 ---
 
-## 🆘 Troubleshooting
+##  Troubleshooting
 
 ### Payment fails immediately
 - Check Paystack public key in `.env`

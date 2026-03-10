@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'paystack_checkout_screen.dart';
@@ -54,7 +55,7 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
   Map<String, double> _calculateBreakdown(double amount) {
     final platformFee = _paystackService.calculateClientFee(amount);
     final totalAmount = amount + platformFee;
-    final caregiverEarning = amount - _paystackService.calculateCaregiverCommission(amount);
+    final caregiverEarning = amount;
 
     return {
       'baseAmount': amount,
@@ -97,7 +98,7 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
         },
       );
 
-      // Get payment config for Paystack
+      // Get base payment config
       final paymentConfig = _paystackService.getPaymentConfig(
         email: user.email ?? 'user@carelink.app',
         amount: amount,
@@ -108,6 +109,30 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
           'caregiverId': widget.caregiverId,
         },
       );
+
+      // Initialize transaction on backend to get access code
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('initializeTransaction');
+      final initResult = await callable.call(<String, dynamic>{
+        'email': paymentConfig['email'],
+        'amount': paymentConfig['amount'],
+        'reference': paymentConfig['reference'],
+        'currency': paymentConfig['currency'],
+        'metadata': paymentConfig['metadata'],
+      });
+
+      final initData = initResult.data as Map<String, dynamic>?;
+      final accessCode =
+          initData?['accessCode'] ??
+          initData?['access_code'] ??
+          initData?['data']?['access_code'];
+
+      if (initData == null || accessCode == null) {
+        throw Exception('Could not initialize payment with Paystack');
+      }
+
+      // Add access code to config
+      paymentConfig['accessCode'] = accessCode;
 
       if (!mounted) return;
 
@@ -122,13 +147,19 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
         return;
       }
 
+      if (!mounted) return;
+
       // Initiate Paystack checkout with payment config and verify result
       final success = await _initiatePaystackCheckout(paymentConfig, reference);
 
       if (!success) {
         // Payment not completed or verification failed
         if (!mounted) return;
-        _showError('Payment was not completed. Please try again.');
+        _showError(
+          'Payment was not completed. Please try again.',
+          showRetry: true,
+          reference: reference,
+        );
         setState(() => _isProcessing = false);
         return;
       }
@@ -433,7 +464,7 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
                 children: [
                   const Icon(Icons.credit_card, size: 20),
                   const SizedBox(width: 12),
-                  Expanded(child: Text('No saved cards')),
+                  const Expanded(child: Text('No saved cards')),
                   TextButton(
                     onPressed: _onAddCardPressed,
                     child: const Text('Add card'),
@@ -441,6 +472,7 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 24),
 
             // Pay button + View history
             Row(
@@ -505,20 +537,23 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
 
       if (checkoutResult != true) {
         await _paystackService.handlePaymentFailure(reference, 'User cancelled payment');
-        _showError('Payment was cancelled. Tap to retry.', showRetry: true, reference: reference);
+        _showError(
+          'Payment was cancelled. Tap to retry.',
+          showRetry: true,
+          reference: reference,
+        );
         return false;
       }
 
-      // Verify with backend Cloud Function
-      final verified = await _paystackService.verifyPayment(reference);
-      if (!verified) {
-        await _paystackService.handlePaymentFailure(reference, 'Verification failed');
-        _showError('Payment verification failed. Tap to retry.', showRetry: true, reference: reference);
-      }
-      return verified;
+      // Checkout screen already verifies and only returns true on verified payment.
+      return true;
     } catch (e) {
       await _paystackService.handlePaymentFailure(reference, e.toString());
-      _showError('Paystack error: $e. Tap to retry.', showRetry: true, reference: reference);
+      _showError(
+        'Paystack error: $e. Tap to retry.',
+        showRetry: true,
+        reference: reference,
+      );
       return false;
     }
   }
