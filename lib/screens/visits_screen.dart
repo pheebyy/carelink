@@ -11,7 +11,8 @@ class VisitsScreen extends StatefulWidget {
 
 class _VisitsScreenState extends State<VisitsScreen> {
   final _uid = FirebaseAuth.instance.currentUser?.uid;
-  String _selectedFilter = 'upcoming'; // upcoming, completed, cancelled
+  String _selectedFilter = 'upcoming'; // all, upcoming, completed, cancelled
+  String? _updatingVisitId;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +56,8 @@ class _VisitsScreenState extends State<VisitsScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
+                  _buildFilterChip('All', 'all'),
+                  const SizedBox(width: 8),
                   _buildFilterChip('Upcoming', 'upcoming'),
                   const SizedBox(width: 8),
                   _buildFilterChip('Completed', 'completed'),
@@ -101,7 +104,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
                                 color: Colors.red.shade400
                               ),
                               const SizedBox(height: 16),
-                              Text('Error loading visits: ${snapshot.error}'),
+                              const Text('Could not load visits right now. Please try again.'),
                             ],
                           ),
                         );
@@ -126,8 +129,9 @@ class _VisitsScreenState extends State<VisitsScreen> {
                         itemCount: filteredDocs.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
+                          final visitDoc = filteredDocs[index];
                           final data = filteredDocs[index].data() as Map<String, dynamic>;
-                          return _buildVisitCard(data);
+                          return _buildVisitCard(visitDoc.id, data);
                         },
                       );
                     },
@@ -163,7 +167,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
     );
   }
 
-  Widget _buildVisitCard(Map<String, dynamic> data) {
+  Widget _buildVisitCard(String visitId, Map<String, dynamic> data) {
     final caregiverName = data['caregiverName'] ?? 'Caregiver';
     final serviceType = data['serviceType'] ?? 'Care Visit';
     final dateTime = data['dateTime'] as Timestamp?;
@@ -176,6 +180,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
         : 'Date not set';
 
     final statusColor = _getStatusColor(status);
+    final isUpdating = _updatingVisitId == visitId;
 
     return Container(
       decoration: BoxDecoration(
@@ -332,9 +337,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () {
-                        _showCancelDialog(caregiverName);
-                      },
+                      onPressed: isUpdating ? null : () => _showCancelDialog(visitId, caregiverName),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Colors.red),
                         shape: RoundedRectangleBorder(
@@ -350,14 +353,9 @@ class _VisitsScreenState extends State<VisitsScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Reschedule functionality coming soon'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      },
+                      onPressed: isUpdating
+                          ? null
+                          : () => _showRescheduleDialog(visitId, caregiverName, dateTime?.toDate()),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         shape: RoundedRectangleBorder(
@@ -408,7 +406,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'You have no $_selectedFilter visits scheduled',
+              'You have no ${_selectedFilter == 'all' ? '' : '$_selectedFilter '}visits scheduled',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -420,7 +418,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
             ElevatedButton(
               onPressed: () {
                 setState(() {
-                  _selectedFilter = 'upcoming';
+                  _selectedFilter = 'all';
                 });
               },
               style: ElevatedButton.styleFrom(
@@ -434,7 +432,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
     );
   }
 
-  void _showCancelDialog(String caregiverName) {
+  void _showCancelDialog(String visitId, String caregiverName) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -448,14 +446,9 @@ class _VisitsScreenState extends State<VisitsScreen> {
             child: const Text('Keep Visit'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Visit cancelled'),
-                  backgroundColor: Colors.red,
-                ),
-              );
+              await _cancelVisit(visitId);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
@@ -465,6 +458,193 @@ class _VisitsScreenState extends State<VisitsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _cancelVisit(String visitId) async {
+    if (_uid == null) return;
+
+    try {
+      setState(() => _updatingVisitId = visitId);
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .collection('visits')
+          .doc(visitId)
+          .set({
+        'status': 'cancelled',
+        'cancelledAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Visit cancelled successfully'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to cancel visit. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _updatingVisitId = null);
+      }
+    }
+  }
+
+  void _showRescheduleDialog(
+    String visitId,
+    String caregiverName,
+    DateTime? currentDateTime,
+  ) {
+    final reasonCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reschedule Visit?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Choose a new date and time for your visit with $caregiverName.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional)',
+                hintText: 'Why are you rescheduling?',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final reason = reasonCtrl.text.trim();
+              Navigator.pop(ctx);
+              final newDateTime = await _pickRescheduleDateTime(currentDateTime);
+              if (newDateTime == null) return;
+              await _rescheduleVisit(
+                visitId,
+                newDateTime,
+                reason: reason,
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: const Text('Choose Time'),
+          ),
+        ],
+      ),
+    ).whenComplete(reasonCtrl.dispose);
+  }
+
+  Future<DateTime?> _pickRescheduleDateTime(DateTime? currentDateTime) async {
+    final now = DateTime.now();
+    final initialDate = currentDateTime != null && currentDateTime.isAfter(now)
+        ? currentDateTime
+        : now.add(const Duration(days: 1));
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime(initialDate.year, initialDate.month, initialDate.day),
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+
+    if (pickedDate == null) return null;
+
+    final initialTime = currentDateTime != null
+        ? TimeOfDay(hour: currentDateTime.hour, minute: currentDateTime.minute)
+        : const TimeOfDay(hour: 9, minute: 0);
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+    );
+
+    if (pickedTime == null) return null;
+
+    final combined = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+
+    if (combined.isBefore(now)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please choose a future date and time.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return null;
+    }
+
+    return combined;
+  }
+
+  Future<void> _rescheduleVisit(
+    String visitId,
+    DateTime newDateTime, {
+    String? reason,
+  }) async {
+    if (_uid == null) return;
+
+    try {
+      setState(() => _updatingVisitId = visitId);
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .collection('visits')
+          .doc(visitId)
+          .set({
+        'dateTime': Timestamp.fromDate(newDateTime),
+        'status': 'upcoming',
+        'rescheduleReason': (reason != null && reason.isNotEmpty) ? reason : null,
+        'rescheduledAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Visit rescheduled successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to reschedule visit. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _updatingVisitId = null);
+      }
+    }
   }
 
   Color _getStatusColor(String status) {

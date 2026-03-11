@@ -28,7 +28,7 @@ class PaymentExampleScreen extends StatelessWidget {
           _buildExampleCard(
             context,
             title: 'Premium Subscription',
-            description: 'Upgrade to Premium for KSh 300/month',
+            description: 'Upgrade to Premium for KES 300/month',
             amount: 300.0,
             icon: Icons.star,
             color: Colors.orange,
@@ -38,7 +38,7 @@ class PaymentExampleScreen extends StatelessWidget {
           _buildExampleCard(
             context,
             title: 'One-time Payment',
-            description: 'Test the payment flow with KSh 100',
+            description: 'Test the payment flow with KES 100',
             amount: 100.0,
             icon: Icons.payment,
             color: Colors.blue,
@@ -141,7 +141,7 @@ class PaymentExampleScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'KSh ${amount.toStringAsFixed(2)}',
+                      'KES ${amount.toStringAsFixed(2)}',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,

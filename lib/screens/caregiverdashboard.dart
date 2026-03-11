@@ -764,7 +764,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
         const SizedBox(height: 4),
         Flexible(
           child: Text(
-            '$careType • Ksh $pay',
+            '$careType • KES $pay',
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey.shade600,

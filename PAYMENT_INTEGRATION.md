@@ -72,7 +72,7 @@ paymentType: 'client_payment'
 // Caregiver commission (5% of amount)
 paymentType: 'caregiver_commission'
 
-// Premium subscription (fixed KSh 300)
+// Premium subscription (fixed KES 300)
 paymentType: 'premium_subscription'
 ```
 
@@ -264,7 +264,7 @@ final clientFee = amount * 0.02;
 final caregiverCommission = amount * 0.05;
 
 // Premium Subscription
-final premiumPrice = 300.0; // Fixed KSh
+final premiumPrice = 300.0; // Fixed KES
 ```
 
 ---

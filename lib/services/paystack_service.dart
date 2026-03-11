@@ -46,7 +46,7 @@ class PaystackService {
     return amount * rate;
   }
 
-  /// Premium subscription price — fixed at KSh 300
+  /// Premium subscription price — fixed at KES 300
   double getPremiumPriceKES() => 300.0;
 
   // ================================
@@ -255,7 +255,7 @@ class PaystackService {
   /// - "premium_subscription" (caregiver buys premium)
   Map<String, dynamic> getPaymentConfig({
     required String email,
-    required double amount, // in KSh
+    required double amount, // in KES
     String? reference,
     String type = "client_payment",
     Map<String, dynamic>? metadata,
@@ -271,18 +271,18 @@ class PaystackService {
       case "client_payment":
         final fee = calculateClientFee(amount);
         finalAmount = amount + fee;
-        print(' Client fee (2%) added: KSh ${fee.toStringAsFixed(2)}');
+        print(' Client fee (2%) added: KES ${fee.toStringAsFixed(2)}');
         break;
 
       case "caregiver_commission":
         final commission = calculateCaregiverCommission(amount);
         finalAmount = commission;
-        print(' Caregiver commission (5%): KSh ${commission.toStringAsFixed(2)}');
+        print(' Caregiver commission (5%): KES ${commission.toStringAsFixed(2)}');
         break;
 
       case "premium_subscription":
         finalAmount = getPremiumPriceKES();
-        print(' Premium subscription set at KSh ${finalAmount.toStringAsFixed(2)}');
+        print(' Premium subscription set at KES ${finalAmount.toStringAsFixed(2)}');
         break;
 
       default:

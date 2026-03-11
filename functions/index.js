@@ -123,7 +123,7 @@ exports.verifyTransaction = onCall(async (request) => {
       { merge: true }
     );
 
-    // Premium Activation (KSh 300)
+    // Premium Activation (KES 300)
     if (role === "caregiver" && amountKES >= 300) {
       await db.collection("users").doc(userId).update({
         isPremium: true,

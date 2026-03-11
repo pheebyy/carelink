@@ -105,7 +105,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'KSh ${totalAmount.toStringAsFixed(2)}',
+                  'KES ${totalAmount.toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 32,
@@ -114,7 +114,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Amount: KSh ${widget.amount.toStringAsFixed(2)} + Fee: KSh ${_paystackService.calculateClientFee(widget.amount).toStringAsFixed(2)}',
+                  'Amount: KES ${widget.amount.toStringAsFixed(2)} + Fee: KES ${_paystackService.calculateClientFee(widget.amount).toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
@@ -409,7 +409,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Amount'),
-                Text('KSh ${widget.amount.toStringAsFixed(2)}'),
+                Text('KES ${widget.amount.toStringAsFixed(2)}'),
               ],
             ),
             const SizedBox(height: 8),
@@ -417,7 +417,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Processing Fee'),
-                Text('KSh ${_paystackService.calculateClientFee(widget.amount).toStringAsFixed(2)}'),
+                Text('KES ${_paystackService.calculateClientFee(widget.amount).toStringAsFixed(2)}'),
               ],
             ),
             const Divider(height: 24),
@@ -429,7 +429,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  'KSh ${totalAmount.toStringAsFixed(2)}',
+                  'KES ${totalAmount.toStringAsFixed(2)}',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -489,7 +489,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Confirm Payment'),
         content: Text(
-          'Pay KSh ${widget.amount.toStringAsFixed(2)} with ${card['cardType']} •••• ${card['last4']}?',
+          'Pay KES ${widget.amount.toStringAsFixed(2)} with ${card['cardType']} •••• ${card['last4']}?',
         ),
         actions: [
           TextButton(

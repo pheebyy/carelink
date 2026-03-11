@@ -76,7 +76,7 @@ class _CardPaymentScreenState extends State<CardPaymentScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'KSh ${totalAmount.toStringAsFixed(2)}',
+                      'KES ${totalAmount.toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontSize: 36,
                         fontWeight: FontWeight.bold,
@@ -85,7 +85,7 @@ class _CardPaymentScreenState extends State<CardPaymentScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Base: KSh ${widget.amount.toStringAsFixed(2)} + Fee: KSh ${_paystackService.calculateClientFee(widget.amount).toStringAsFixed(2)}',
+                      'Base: KES ${widget.amount.toStringAsFixed(2)} + Fee: KES ${_paystackService.calculateClientFee(widget.amount).toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.black54,
