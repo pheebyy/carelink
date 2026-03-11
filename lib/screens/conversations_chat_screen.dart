@@ -21,6 +21,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
   final _scrollController = ScrollController();
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _callSub;
   String? _activeIncomingCallId;
+  String? _lastMarkedSnapshotKey;
 
   @override
   void initState() {
@@ -111,10 +112,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
     final text = _msgCtrl.text.trim();
     if (text.isEmpty) return;
 
-    final ref = FirebaseFirestore.instance
-        .collection('conversations')
-        .doc(widget.conversationId)
-        .collection('messages');
+    final conversationRef = FirebaseFirestore.instance
+      .collection('conversations')
+      .doc(widget.conversationId);
+
+    final ref = conversationRef.collection('messages');
 
     final message = ChatMessage(
       id: '', // Will be set by Firestore
@@ -126,16 +128,32 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
       readBy: [uid],
     );
 
-    await ref.add(message.toMap());
+    // Add message + update metadata/unread counters atomically.
+    await FirebaseFirestore.instance.runTransaction((txn) async {
+      final conversationSnap = await txn.get(conversationRef);
+      final data = conversationSnap.data() ?? <String, dynamic>{};
+      final participantIds =
+          List<String>.from((data['participantIds'] as List<dynamic>? ?? const []));
 
-    // Update conversation metadata
-    await FirebaseFirestore.instance
-        .collection('conversations')
-        .doc(widget.conversationId)
-        .set({
-      'lastMessage': text,
-      'lastMessageTime': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      final recipientIds = participantIds.where((id) => id != uid).toList();
+      final unreadUpdates = <String, dynamic>{
+        'unreadCount.$uid': 0,
+      };
+      for (final recipientId in recipientIds) {
+        unreadUpdates['unreadCount.$recipientId'] = FieldValue.increment(1);
+      }
+
+      txn.set(ref.doc(), message.toMap());
+      txn.set(
+        conversationRef,
+        {
+          'lastMessage': text,
+          'lastMessageTime': FieldValue.serverTimestamp(),
+          ...unreadUpdates,
+        },
+        SetOptions(merge: true),
+      );
+    });
 
     _msgCtrl.clear();
     _scrollToBottom();
@@ -143,27 +161,41 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
   Future<void> _markRead(QuerySnapshot<Map<String, dynamic>> snap) async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    if (snap.docs.isEmpty) return;
+
+    final lastDoc = snap.docs.last;
+    final snapshotKey = '${lastDoc.id}_${lastDoc.data()['timestamp'] ?? ''}_${snap.docs.length}';
+    if (snapshotKey == _lastMarkedSnapshotKey) return;
+
     final batch = FirebaseFirestore.instance.batch();
+    var hasUpdates = false;
 
     for (final doc in snap.docs) {
       final data = doc.data();
+      final senderId = data['senderId'] as String?;
       final List<dynamic>? readBy = data['readBy'] as List<dynamic>?;
-      if (readBy == null || !readBy.contains(uid)) {
+      if (senderId != uid && (readBy == null || !readBy.contains(uid))) {
         batch.update(doc.reference, {
           'readBy': FieldValue.arrayUnion([uid])
         });
+        hasUpdates = true;
       }
     }
 
-    await batch.commit();
+    if (hasUpdates) {
+      await batch.commit();
+    }
 
     // Update unread count
     await FirebaseFirestore.instance
         .collection('conversations')
         .doc(widget.conversationId)
         .set({
-      'unreadCount': {uid: 0}
+      'unreadCount.$uid': 0
     }, SetOptions(merge: true));
+
+    _lastMarkedSnapshotKey = snapshotKey;
   }
 
   @override

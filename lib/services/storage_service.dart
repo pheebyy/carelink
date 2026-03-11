@@ -21,10 +21,10 @@ class StorageService {
     final snap = await uploadTask;
     final url = await snap.ref.getDownloadURL();
 
-    await FirebaseFirestore.instance.collection('users').doc(uid).update({
+    await FirebaseFirestore.instance.collection('users').doc(uid).set({
       'profilePhotoUrl': url,
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
 
     return url;
   }

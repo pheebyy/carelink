@@ -82,9 +82,24 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
     if (uid == null) return;
+
+    final dependentAgeText = _dependentAgeCtrl.text.trim();
+    final dependentAge =
+        dependentAgeText.isEmpty ? null : int.tryParse(dependentAgeText);
+
+    if (dependentAgeText.isNotEmpty && dependentAge == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Dependent age must be a valid number'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     
     setState(() => _loading = true);
     
@@ -95,11 +110,29 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
         'phone': _phoneCtrl.text.trim(),
         'address': _addressCtrl.text.trim(),
         'dependentName': _dependentNameCtrl.text.trim(),
-        'dependentAge': int.tryParse(_dependentAgeCtrl.text.trim()),
+        'dependentAge': dependentAge,
         'dependentCondition': _dependentConditionCtrl.text.trim(),
         'emergencyContact': _emergencyContactCtrl.text.trim(),
         'emergencyPhone': _emergencyPhoneCtrl.text.trim(),
       });
+
+      // Keep FirebaseAuth profile in sync where possible.
+      if (user != null) {
+        await user.updateDisplayName(_nameCtrl.text.trim());
+        if (_photoUrl != null && _photoUrl!.isNotEmpty) {
+          await user.updatePhotoURL(_photoUrl);
+        }
+
+        final newEmail = _emailCtrl.text.trim();
+        if (newEmail.isNotEmpty && newEmail != user.email) {
+          try {
+            await user.verifyBeforeUpdateEmail(newEmail);
+          } catch (_) {
+            // Firestore update already succeeded; email update may require recent login.
+          }
+        }
+        await user.reload();
+      }
       
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -108,6 +141,7 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
           backgroundColor: Colors.green,
         ),
       );
+      Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -118,7 +152,9 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
         );
       }
     } finally {
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -145,6 +181,9 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
         bytes: bytes,
         contentType: 'image/$extension',
       );
+
+      await FirebaseAuth.instance.currentUser?.updatePhotoURL(url);
+      await FirebaseAuth.instance.currentUser?.reload();
       
       setState(() => _photoUrl = url);
       
@@ -166,7 +205,9 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
         );
       }
     } finally {
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 

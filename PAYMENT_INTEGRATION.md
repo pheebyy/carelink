@@ -281,19 +281,8 @@ final premiumPrice = 300.0; // Fixed KSh
 
 ## 📱 SMS Notifications
 
-After successful payment, Azure Communication Service sends SMS:
-
-```dart
-// Automatic SMS after payment verification
-if (verified && _azureComm.isInitialized) {
-  await _azureComm.sendPaymentConfirmation(
-    phone: phoneNumber,
-    recipientName: name,
-    amount: amount,
-    reference: reference,
-  );
-}
-```
+SMS notifications are not part of the current payment implementation.
+If needed, send SMS from backend Cloud Functions with your preferred provider.
 
 ---
 
@@ -303,7 +292,6 @@ if (verified && _azureComm.isInitialized) {
 - [ ] Deploy Firebase Cloud Functions
 - [ ] Test with Paystack test cards
 - [ ] Configure M-Pesa in Paystack dashboard
-- [ ] Set up Azure Communication for SMS
 - [ ] Test saved cards flow
 - [ ] Test M-Pesa STK Push
 - [ ] Go live with production keys

@@ -67,15 +67,36 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
     if (uid == null) return;
+
+    final ageText = _ageCtrl.text.trim();
+    final expText = _experienceCtrl.text.trim();
+    final parsedAge = ageText.isEmpty ? null : int.tryParse(ageText);
+    final parsedExp = expText.isEmpty ? null : int.tryParse(expText);
+
+    if (ageText.isNotEmpty && parsedAge == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Age must be a valid number')),
+      );
+      return;
+    }
+
+    if (expText.isNotEmpty && parsedExp == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Experience must be a valid number')),
+      );
+      return;
+    }
+
     setState(() => _loading = true);
     try {
       await _fs.updateUser(uid, {
         'name': _nameCtrl.text.trim(),
-        'age': int.tryParse(_ageCtrl.text.trim()),
+        'age': parsedAge,
         'gender': _genderCtrl.text.trim(),
-        'experienceYears': int.tryParse(_experienceCtrl.text.trim()),
+        'experienceYears': parsedExp,
         'availability': _availabilityCtrl.text.trim(),
         'location': _locationCtrl.text.trim(),
         'specializations': _specializationsCtrl.text
@@ -84,24 +105,79 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             .where((e) => e.isNotEmpty)
             .toList(),
       });
+
+      // Keep FirebaseAuth profile in sync where available.
+      if (user != null) {
+        await user.updateDisplayName(_nameCtrl.text.trim());
+        if (_photoUrl != null && _photoUrl!.isNotEmpty) {
+          await user.updatePhotoURL(_photoUrl);
+        }
+        await user.reload();
+      }
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile saved')));
+      Navigator.of(context).pop(true);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _pickAndUploadPhoto() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
     if (uid == null) return;
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1024);
-    if (image == null) return;
-    final bytes = await image.readAsBytes();
-    final url = await _storage.uploadProfilePhoto(uid: uid, bytes: bytes, contentType: 'image/${image.name.split('.').last}');
-    setState(() => _photoUrl = url);
+    try {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+      );
+      if (image == null) return;
+
+      final extension = image.name.contains('.')
+          ? image.name.split('.').last.toLowerCase()
+          : 'jpeg';
+      final bytes = await image.readAsBytes();
+
+      setState(() => _loading = true);
+
+      final url = await _storage.uploadProfilePhoto(
+        uid: uid,
+        bytes: bytes,
+        contentType: 'image/$extension',
+      );
+
+      // Keep FirebaseAuth photo URL in sync.
+      await user?.updatePhotoURL(url);
+      await user?.reload();
+
+      if (!mounted) return;
+      setState(() => _photoUrl = url);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile photo updated'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error uploading photo: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
   }
 
   @override

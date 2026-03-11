@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/paystack_service.dart';
 import 'card_payment_screen.dart';
-import 'mpesa_payment_screen.dart';
+
 import 'saved_cards_screen.dart';
 
 /// Modern payment method selection screen
@@ -167,17 +167,6 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // M-Pesa Option
-                _buildPaymentMethodCard(
-                  icon: Icons.phone_android,
-                  iconColor: Colors.green,
-                  title: 'M-Pesa',
-                  subtitle: 'Pay instantly with your phone',
-                  helperText: 'We will send an STK push from Paystack to your Safaricom line.',
-                  statusLabel: 'Live',
-                  statusColor: Colors.green,
-                  onTap: () => _navigateToMpesa(),
-                ),
 
                 const SizedBox(height: 12),
 
@@ -462,23 +451,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
     }
   }
 
-  void _navigateToMpesa() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => MpesaPaymentScreen(
-          amount: widget.amount,
-          email: _userEmail ?? '',
-          paymentType: widget.paymentType,
-          metadata: widget.metadata,
-        ),
-      ),
-    ).then((result) {
-      if (result == true && mounted) {
-        Navigator.pop(context, true);
-      }
-    });
-  }
+
 
   void _navigateToCardPayment() {
     Navigator.push(

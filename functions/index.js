@@ -218,6 +218,7 @@ exports.onNewMessage = onDocumentCreated(
 
       const participantIds = conversationDoc.data().participantIds || [];
       const recipientIds = participantIds.filter((id) => id !== senderId);
+      const notificationLogs = [];
 
       if (recipientIds.length === 0) {
         console.log("No recipients found");
@@ -227,20 +228,32 @@ exports.onNewMessage = onDocumentCreated(
       // Get sender info
       const senderDoc = await db.collection("users").doc(senderId).get();
       const senderName =
-        senderDoc.exists && senderDoc.data().displayName
-          ? senderDoc.data().displayName
+        senderDoc.exists
+          ? senderDoc.data().displayName || senderDoc.data().name || "Someone"
           : "Someone";
 
       // Send notification to each recipient
       const notificationPromises = recipientIds.map(async (recipientId) => {
         const userDoc = await db.collection("users").doc(recipientId).get();
-        if (!userDoc.exists) return null;
+        if (!userDoc.exists) {
+          notificationLogs.push({
+            recipientId,
+            status: "skipped",
+            reason: "recipient_not_found",
+          });
+          return null;
+        }
 
         const userData = userDoc.data();
         const fcmTokens = userData.fcmTokens || [];
 
         if (fcmTokens.length === 0) {
           console.log(`No FCM tokens for user ${recipientId}`);
+          notificationLogs.push({
+            recipientId,
+            status: "skipped",
+            reason: "no_tokens",
+          });
           return null;
         }
 
@@ -266,11 +279,27 @@ exports.onNewMessage = onDocumentCreated(
               ...payload,
               token,
             })
+            .then((messageId) => {
+              notificationLogs.push({
+                recipientId,
+                token,
+                status: "sent",
+                messageId,
+              });
+              return messageId;
+            })
             .catch((err) => {
               console.error(
                 `Error sending to token ${token}:`,
                 err.message
               );
+              notificationLogs.push({
+                recipientId,
+                token,
+                status: "failed",
+                errorCode: err.code || "unknown",
+                errorMessage: err.message || "Unknown error",
+              });
               // Remove invalid tokens
               if (
                 err.code === "messaging/invalid-registration-token" ||
@@ -291,6 +320,17 @@ exports.onNewMessage = onDocumentCreated(
       });
 
       await Promise.all(notificationPromises);
+
+      await db.collection("notification_logs").add({
+        type: "chat_message",
+        conversationId,
+        messageId,
+        senderId,
+        recipientIds,
+        attempts: notificationLogs,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
       console.log("✅ Push notifications sent successfully");
       return null;
     } catch (error) {

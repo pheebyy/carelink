@@ -1,6 +1,5 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'azure_communication_service.dart';
 
 
 
@@ -10,7 +9,6 @@ class PaystackService {
 
   late String _publicKey;
   bool _initialized = false;
-  final _azureComm = AzureCommunicationService();
 
   PaystackService._internal();
 
@@ -344,22 +342,7 @@ class PaystackService {
       });
       final data = result.data as Map<String, dynamic>?;
       final verified = data != null && (data['verified'] == true || data['status'] == 'verified');
-      
-      // Send SMS notification if payment verified and Azure is initialized
-      if (verified && _azureComm.isInitialized) {
-        try {
-          await _azureComm.sendPaymentConfirmation(
-            phone: data['phone'] ?? '',
-            recipientName: data['name'] ?? 'Customer',
-            amount: (data['amount'] ?? 0.0).toDouble(),
-            reference: reference,
-          );
-          print('Payment confirmation SMS sent');
-        } catch (smsError) {
-          print(' SMS notification failed but payment verified: $smsError');
-        }
-      }
-      
+
       print('verifyPayment result: $data');
       return verified;
     } catch (e) {

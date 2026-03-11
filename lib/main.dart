@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
-import 'screens/azure_test_screen.dart';
 import 'screens/payment_example_screen.dart';
 import 'services/notification_service.dart';
-import 'services/azure_communication_service.dart';
 import 'services/paystack_service.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +36,8 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
     
     // Initialize notification service (Spark plan - client-side only)
     await NotificationService.instance.init();
@@ -37,8 +45,6 @@ Future<void> main() async {
     // Initialize Paystack Service
     PaystackService().initialize();
     
-    // Initialize Azure Communication Service
-    AzureCommunicationService().initialize();
   } catch (e) {
     print(' Initialization error: $e');
   }
@@ -66,7 +72,6 @@ class CareLinkApp extends StatelessWidget {
       routes: {
         '/': (context) => const LoginScreen(),
         '/login': (context) => const LoginScreen(),
-        '/azure-test': (context) => const AzureTestScreen(),
         '/payment-demo': (context) => const PaymentExampleScreen(),
       },
     );
