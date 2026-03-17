@@ -173,6 +173,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
     final dateTime = data['dateTime'] as Timestamp?;
     final status = data['status'] as String? ?? 'upcoming';
     final notes = data['notes'] as String? ?? '';
+    final rescheduleReason = data['rescheduleReason'] as String? ?? '';
     final location = data['location'] as String? ?? 'Home';
 
     final formattedDate = dateTime != null 
@@ -320,6 +321,37 @@ class _VisitsScreenState extends State<VisitsScreen> {
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.blue.shade700,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Reschedule reason section if available
+            if (rescheduleReason.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.event_repeat, size: 16, color: Colors.orange.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Reschedule reason: $rescheduleReason',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange.shade800,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,

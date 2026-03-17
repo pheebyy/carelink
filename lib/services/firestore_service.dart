@@ -177,34 +177,40 @@ class FirestoreService {
         throw Exception("Bid amount must be greater than 0");
       }
 
-      // Check if caregiver already has a bid on this job
-      final existingBids = await _db
-          .collection('jobs')
-          .doc(jobId)
-          .collection('bids')
-          .where('caregiverId', isEqualTo: caregiverId)
-          .get();
+      final jobRef = _db.collection('jobs').doc(jobId);
+      // Enforce one bid per caregiver by using caregiverId as bid document id.
+      final bidRef = jobRef.collection('bids').doc(caregiverId);
 
-      if (existingBids.docs.isNotEmpty) {
-        throw Exception("You have already placed a bid on this job");
-      }
+      await _db.runTransaction((txn) async {
+        final jobSnap = await txn.get(jobRef);
+        if (!jobSnap.exists) {
+          throw Exception("Job not found");
+        }
 
-      final ref = await _db
-          .collection('jobs')
-          .doc(jobId)
-          .collection('bids')
-          .add({
-        'jobId': jobId,
-        'caregiverId': caregiverId,
-        'amount': amount,
-        'proposal': proposal,
-        'estimatedDuration': estimatedDuration,
-        'status': 'pending', // pending, approved, rejected
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
+        final jobData = jobSnap.data() ?? <String, dynamic>{};
+        final jobStatus = (jobData['status'] ?? '').toString().toLowerCase();
+        if (jobStatus != 'open') {
+          throw Exception("This job is no longer open for bidding");
+        }
+
+        final existingBidSnap = await txn.get(bidRef);
+        if (existingBidSnap.exists) {
+          throw Exception("You have already placed a bid on this job");
+        }
+
+        txn.set(bidRef, {
+          'jobId': jobId,
+          'caregiverId': caregiverId,
+          'amount': amount,
+          'proposal': proposal,
+          'estimatedDuration': estimatedDuration,
+          'status': 'pending', // pending, approved, rejected
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       });
 
-      return ref.id;
+      return bidRef.id;
     } catch (e) {
       print('🔥 Error creating bid: $e');
       rethrow;
@@ -239,16 +245,46 @@ class FirestoreService {
     }
   }
 
-  Future<void> approveBid(String jobId, String bidId, String caregiverId) async {
+  Future<void> approveBid(String jobId, String bidId) async {
     try {
-      if (jobId.isEmpty || bidId.isEmpty || caregiverId.isEmpty) {
-        throw Exception("Job ID, Bid ID, and Caregiver ID cannot be empty");
+      if (jobId.isEmpty || bidId.isEmpty) {
+        throw Exception("Job ID and Bid ID cannot be empty");
       }
 
       // Use transaction to ensure atomicity
       await _db.runTransaction((txn) async {
+        final jobRef = _db.collection('jobs').doc(jobId);
+        final bidRef = jobRef.collection('bids').doc(bidId);
+
+        final jobSnap = await txn.get(jobRef);
+        if (!jobSnap.exists) {
+          throw Exception("Job not found");
+        }
+
+        final jobData = jobSnap.data() ?? <String, dynamic>{};
+        final jobStatus = (jobData['status'] ?? '').toString().toLowerCase();
+        if (jobStatus != 'open') {
+          throw Exception("Job is no longer open");
+        }
+
+        final selectedBidSnap = await txn.get(bidRef);
+        if (!selectedBidSnap.exists) {
+          throw Exception("Selected bid not found");
+        }
+
+        final selectedBidData = selectedBidSnap.data() ?? <String, dynamic>{};
+        final selectedBidStatus =
+            (selectedBidData['status'] ?? '').toString().toLowerCase();
+        if (selectedBidStatus != 'pending') {
+          throw Exception("Only pending bids can be approved");
+        }
+
+        final caregiverId = (selectedBidData['caregiverId'] ?? '').toString();
+        if (caregiverId.isEmpty) {
+          throw Exception("Selected bid has no caregiver");
+        }
+
         // Update the approved bid
-        final bidRef = _db.collection('jobs').doc(jobId).collection('bids').doc(bidId);
         txn.update(bidRef, {
           'status': 'approved',
           'approvedAt': FieldValue.serverTimestamp(),
@@ -256,9 +292,7 @@ class FirestoreService {
         });
 
         // Reject all other bids
-        final otherBidsSnapshot = await _db
-            .collection('jobs')
-            .doc(jobId)
+        final otherBidsSnapshot = await jobRef
             .collection('bids')
             .where('status', isEqualTo: 'pending')
             .get();
@@ -273,7 +307,6 @@ class FirestoreService {
         }
 
         // Update job status and assign caregiver
-        final jobRef = _db.collection('jobs').doc(jobId);
         txn.update(jobRef, {
           'caregiverId': caregiverId,
           'status': 'assigned',

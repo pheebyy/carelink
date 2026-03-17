@@ -61,9 +61,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               TextField(
                 controller: _bidAmountCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Bid Amount (₦)',
+                  labelText: 'Bid Amount (KES)',
                   hintText: 'Enter your bid amount',
-                  prefixText: '₦',
+                  prefixText: 'KES ',
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
@@ -248,7 +248,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               children: [
                 _buildInfoChip(Icons.category, 'Type: ${job['careType'] ?? 'N/A'}'),
                 if (job['budget'] != null)
-                  _buildInfoChip(Icons.attach_money, 'Budget: ₦${job['budget']}'),
+                  _buildInfoChip(Icons.attach_money, 'Budget: KES ${job['budget']}'),
                 if (job['location'] != null)
                   _buildInfoChip(Icons.location_on, job['location']),
               ],
@@ -369,7 +369,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     final amount = bid['amount'] ?? 0.0;
     final proposal = bid['proposal'] ?? '';
     final duration = bid['estimatedDuration'];
-    final caregiverId = bid['caregiverId'];
     
     Color statusColor = Colors.orange;
     if (status == 'approved') statusColor = Colors.green;
@@ -386,7 +385,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '₦${amount.toStringAsFixed(2)}',
+                  'KES ${amount.toStringAsFixed(2)}',
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -458,7 +457,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   ElevatedButton(
                     onPressed: () async {
                       try {
-                        await _fs.approveBid(widget.jobId, bidId, caregiverId);
+                        await _fs.approveBid(widget.jobId, bidId);
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Bid approved! Caregiver assigned.')),

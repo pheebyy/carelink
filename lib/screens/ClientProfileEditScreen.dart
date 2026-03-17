@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/firestore_service.dart';
+import '../services/location_tracking_service.dart';
 import '../services/storage_service.dart';
 
 class ClientProfileEditScreen extends StatefulWidget {
@@ -229,6 +230,8 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
               try {
                 setState(() => _loading = true);
                 
+                await LocationTrackingService.instance.stopTracking();
+
                 // Sign out from Firebase
                 await FirebaseAuth.instance.signOut();
                 

@@ -1,5 +1,6 @@
 import 'package:carelink/screens/caregiverdashboard.dart';
 import 'package:carelink/screens/client_dashboard.dart';
+import 'package:carelink/services/location_tracking_service.dart';
 import 'package:carelink/screens/forgot_password_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -212,6 +213,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final data = doc.data() ?? {};
       final role = data['role'] as String?;
+      final gpsTrackingEnabled = data['gpsTrackingEnabled'] == true;
+
+      if (gpsTrackingEnabled) {
+        await LocationTrackingService.instance.startTracking(user.uid);
+      }
 
       // 🚪 Navigate according to role
       if (role == 'caregiver') {

@@ -49,5 +49,9 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>CareLink uses your location to match you with nearby care opportunities and keep your profile location updated.</string>
+		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+		<string>CareLink uses your location to keep your availability and job tracking accurate while you are using the app.</string>
 	</dict>
 </plist>

@@ -1,5 +1,6 @@
 import 'package:carelink/screens/caregiverdashboard.dart';
 import 'package:carelink/screens/client_dashboard.dart';
+import 'package:carelink/services/location_tracking_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -262,6 +263,8 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
   final Set<String> _selectedSkills = {};
   String? _selectedRole;
   bool _isSaving = false;
+  bool _gpsTrackingEnabled = false;
+  bool _isFetchingLocation = false;
 
   @override
   void initState() {
@@ -331,10 +334,15 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
         'role': _selectedRole!.toLowerCase(),
         'availability': _availabilityCtrl.text.trim(),
         'specializations': _selectedSkills.toList(),
+        'gpsTrackingEnabled': _gpsTrackingEnabled,
         if (geoData != null) 'geo': geoData,
         'onboarded': true,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+
+      if (_gpsTrackingEnabled) {
+        await LocationTrackingService.instance.startTracking(uid);
+      }
 
       if (!mounted) return;
 
@@ -345,6 +353,27 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
       debugPrint('Save error: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _useCurrentLocation() async {
+    setState(() => _isFetchingLocation = true);
+
+    try {
+      final position = await LocationTrackingService.instance.getCurrentPosition();
+      if (!mounted) return;
+
+      setState(() {
+        _latCtrl.text = position.latitude.toStringAsFixed(6);
+        _lngCtrl.text = position.longitude.toStringAsFixed(6);
+      });
+      _showSnackBar('Current location captured.');
+    } catch (e) {
+      _showSnackBar(e.toString().replaceFirst('Exception: ', ''), isError: true);
+    } finally {
+      if (mounted) {
+        setState(() => _isFetchingLocation = false);
+      }
     }
   }
 
@@ -606,6 +635,32 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _isFetchingLocation ? null : _useCurrentLocation,
+            icon: _isFetchingLocation
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.my_location),
+            label: Text(
+              _isFetchingLocation ? 'Getting location...' : 'Use Current Location',
+            ),
+          ),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _gpsTrackingEnabled,
+          title: const Text('Enable GPS tracking'),
+          subtitle: const Text(
+            'Keep your location updated automatically while signed in.',
+          ),
+          onChanged: (value) => setState(() => _gpsTrackingEnabled = value),
         ),
       ],
     );
