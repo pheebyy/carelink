@@ -64,11 +64,11 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
 
   // ==================== Logging Methods ====================
   void _logError(String message, Object error) {
-    debugPrint('❌ $message: $error');
+    debugPrint(' $message: $error');
   }
 
   void _logWarning(String message) {
-    debugPrint('⚠️ $message');
+    debugPrint(' $message');
   }
 
   // ==================== Navigation Methods ====================
@@ -849,7 +849,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                 ),
                 const SizedBox(width: 8),
                 const Text(
-                  'Start Looking for Jobs',
+                  'Check recent bid',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,

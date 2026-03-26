@@ -413,7 +413,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
   Widget _buildMessagesList() {
     if (_uid == null) return const SizedBox.shrink();
 
-    return StreamBuilder<QuerySnapshot>(
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection('conversations')
           .where('participantIds', arrayContains: _uid)
@@ -437,13 +437,15 @@ class _ClientDashboardState extends State<ClientDashboard> {
           );
         }
 
-        var conversations = snapshot.data?.docs ?? [];
+        var conversations = snapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[];
         debugPrint('Loaded ${conversations.length} conversations');
 
         // Sort by lastMessageTime in Dart (since we can't use orderBy with arrayContains)
         conversations.sort((a, b) {
-          final timeA = (a['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
-          final timeB = (b['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+          final dataA = a.data();
+          final dataB = b.data();
+          final timeA = (dataA['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+          final timeB = (dataB['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
           return timeB.compareTo(timeA); // Descending order
         });
 
@@ -460,11 +462,15 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
         return Column(
           children: conversations.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
+            final data = doc.data();
             final participantNames =
                 data['participantNames'] as List<dynamic>? ?? [];
             final lastMessage = data['lastMessage'] as String? ?? '';
-            final unreadCount = (data['unreadCount'] as Map?)?[_uid] ?? 0;
+            final unreadMap = data['unreadCount'] as Map<dynamic, dynamic>?;
+            final unreadCountRaw = unreadMap?[_uid];
+            final unreadCount = unreadCountRaw is int
+                ? unreadCountRaw
+                : int.tryParse(unreadCountRaw?.toString() ?? '0') ?? 0;
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -472,7 +478,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 conversationId: doc.id,
                 names: participantNames.join(', '),
                 message: lastMessage,
-                unreadCount: unreadCount as int,
+                unreadCount: unreadCount,
               ),
             );
           }).toList(),

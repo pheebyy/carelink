@@ -12,20 +12,21 @@ class StorageService {
     required List<int> bytes,
     String contentType = 'image/jpeg',
   }) async {
-    final ref = _storage.ref().child('users/$uid/profile.jpg');
-    SettableMetadata metadata = SettableMetadata(contentType: contentType);
+    try {
+      final ref = _storage.ref().child('users/$uid/profile.jpg');
+      final metadata = SettableMetadata(contentType: contentType);
 
-    UploadTask uploadTask;
-    uploadTask = ref.putData(Uint8List.fromList(bytes), metadata);
+      final snap = await ref.putData(Uint8List.fromList(bytes), metadata);
+      final url = await snap.ref.getDownloadURL();
 
-    final snap = await uploadTask;
-    final url = await snap.ref.getDownloadURL();
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'profilePhotoUrl': url,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
-    await FirebaseFirestore.instance.collection('users').doc(uid).set({
-      'profilePhotoUrl': url,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    return url;
+      return url;
+    } on FirebaseException catch (e) {
+      throw Exception('Storage upload failed (${e.code}): ${e.message ?? 'Unknown error'}');
+    }
   }
 }

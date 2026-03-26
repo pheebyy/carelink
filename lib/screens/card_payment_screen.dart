@@ -29,6 +29,14 @@ class _CardPaymentScreenState extends State<CardPaymentScreen> {
   String? _transactionReference;
 
   @override
+  void initState() {
+    super.initState();
+    if (!_paystackService.isInitialized) {
+      _paystackService.initialize();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final totalAmount = widget.amount + _paystackService.calculateClientFee(widget.amount);
 
@@ -386,6 +394,7 @@ class PaystackWebView extends StatefulWidget {
 class _PaystackWebViewState extends State<PaystackWebView> {
   late WebViewController _controller;
   bool _isLoading = true;
+  bool _completed = false;
 
   @override
   void initState() {
@@ -414,10 +423,34 @@ class _PaystackWebViewState extends State<PaystackWebView> {
   }
 
   void _checkPaymentStatus(String url) {
-    // Check if payment was successful or cancelled
-    if (url.contains('success') || url.contains('callback')) {
+    if (_completed) return;
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+
+    final status = (uri.queryParameters['status'] ?? '').toLowerCase();
+    final hasReference = (uri.queryParameters['reference'] ?? '').isNotEmpty ||
+        (uri.queryParameters['trxref'] ?? '').isNotEmpty;
+    final fullUrl = url.toLowerCase();
+
+    final isSuccess =
+        status == 'success' || status == 'successful' || status == 'paid';
+    final isFailure = status == 'failed' ||
+        status == 'cancelled' ||
+        status == 'canceled' ||
+        status == 'error';
+
+    if (isSuccess || (hasReference && !isFailure)) {
+      _completed = true;
       Navigator.pop(context, true);
-    } else if (url.contains('cancel') || url.contains('close')) {
+      return;
+    }
+
+    if (isFailure ||
+        fullUrl.contains('cancel') ||
+        fullUrl.contains('/close') ||
+        fullUrl.contains('failed')) {
+      _completed = true;
       Navigator.pop(context, false);
     }
   }

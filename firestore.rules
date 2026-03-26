@@ -10,6 +10,24 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    function canCreateOwnUserDoc(uid) {
+      return isUser(uid) &&
+        !request.resource.data.keys().hasAny(['admin']) &&
+        (
+          !request.resource.data.keys().hasAny(['role']) ||
+          request.resource.data.role in ['caregiver', 'client', null]
+        );
+    }
+
+    function canUpdateOwnUserDoc(uid) {
+      return isUser(uid) &&
+        !request.resource.data.diff(resource.data).changedKeys().hasAny(['role', 'admin']);
+    }
+
     function getJob(jobId) {
       return get(/databases/$(database)/documents/jobs/$(jobId));
     }
@@ -31,23 +49,23 @@ service cloud.firestore {
       // Authenticated users can read profiles for discovery/messaging.
       allow read: if isAuthenticated();
 
-      allow create: if isUser(uid);
-      allow update: if isUser(uid);
-      allow delete: if false;
+      allow create: if canCreateOwnUserDoc(uid);
+      allow update: if canUpdateOwnUserDoc(uid) || isAdmin();
+      allow delete: if isAdmin();
 
       // ========================= VISITS SUBCOLLECTION =========================
       match /visits/{visitId} {
-        allow read, create, update, delete: if isUser(uid);
+        allow read, create, update, delete: if isUser(uid) || isAdmin();
       }
 
       // ========================= PAYMENTS SUBCOLLECTION =========================
       match /payments/{paymentId} {
-        allow read, create, update, delete: if isUser(uid);
+        allow read, create, update, delete: if isUser(uid) || isAdmin();
       }
 
       // ========================= CARE PLANS SUBCOLLECTION =========================
       match /carePlans/{carePlanId} {
-        allow read, create, update, delete: if isUser(uid);
+        allow read, create, update, delete: if isUser(uid) || isAdmin();
       }
     }
 
@@ -59,20 +77,20 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.resource.data.clientId == request.auth.uid;
 
-      // Only job owner can modify/delete the job.
-      allow update, delete: if isJobOwner(jobId);
+      // Job owner can modify/delete their own job. Admin can moderate any job.
+      allow update, delete: if isJobOwner(jobId) || isAdmin();
 
       // ========================= APPLICATIONS SUBCOLLECTION =========================
       match /applications/{applicationId} {
         allow read: if isAuthenticated() &&
-          (isJobOwner(jobId) || resource.data.caregiverId == request.auth.uid);
+          (isJobOwner(jobId) || resource.data.caregiverId == request.auth.uid || isAdmin());
 
         allow create: if isAuthenticated() &&
           request.resource.data.caregiverId == request.auth.uid &&
           request.resource.data.jobId == jobId;
 
         allow update: if isAuthenticated() &&
-          (isJobOwner(jobId) || resource.data.caregiverId == request.auth.uid);
+          (isJobOwner(jobId) || resource.data.caregiverId == request.auth.uid || isAdmin());
 
         allow delete: if false;
       }
@@ -120,18 +138,18 @@ service cloud.firestore {
 
     // ========================= CONVERSATIONS COLLECTION =========================
     match /conversations/{conversationId} {
-      allow read: if isConversationParticipant(conversationId);
+      allow read: if isConversationParticipant(conversationId) || isAdmin();
 
       allow create: if isAuthenticated() &&
         request.resource.data.participantIds is list &&
         request.resource.data.participantIds.size() >= 2 &&
         request.resource.data.participantIds.hasAny([request.auth.uid]);
 
-      allow update, delete: if isConversationParticipant(conversationId);
+      allow update, delete: if isConversationParticipant(conversationId) || isAdmin();
 
       // ========================= CONVERSATION MESSAGES SUBCOLLECTION =========================
       match /messages/{messageId} {
-        allow read: if isConversationParticipant(conversationId);
+        allow read: if isConversationParticipant(conversationId) || isAdmin();
 
         allow create: if isConversationParticipant(conversationId) &&
           request.resource.data.senderId == request.auth.uid;
@@ -214,21 +232,21 @@ service cloud.firestore {
     // ========================= TRANSACTIONS (payments) =========================
     match /transactions/{txId} {
       allow read: if isAuthenticated() && (
-        resource.data.clientId == request.auth.uid || resource.data.caregiverId == request.auth.uid);
+        resource.data.clientId == request.auth.uid || resource.data.caregiverId == request.auth.uid || isAdmin());
 
       allow create: if isAuthenticated() &&
         request.resource.data.clientId == request.auth.uid &&
         request.resource.data.keys().hasAll(['clientId','caregiverId','amount','platformFee','caregiverEarnings','status','reference']);
 
       allow update: if isAuthenticated() && (
-        resource.data.clientId == request.auth.uid || resource.data.caregiverId == request.auth.uid);
+        resource.data.clientId == request.auth.uid || resource.data.caregiverId == request.auth.uid || isAdmin());
 
       allow delete: if false;
     }
 
     // ========================= CAREGIVER WALLETS =========================
     match /caregiver_wallets/{caregiverId} {
-      allow read: if isAuthenticated() && request.auth.uid == caregiverId;
+      allow read: if isAuthenticated() && (request.auth.uid == caregiverId || isAdmin());
 
       allow create: if isAuthenticated() && request.auth.uid == caregiverId;
       allow update: if false;

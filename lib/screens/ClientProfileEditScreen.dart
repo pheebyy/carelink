@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/firestore_service.dart';
 import '../services/location_tracking_service.dart';
@@ -160,7 +161,8 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
   }
 
   Future<void> _pickAndUploadPhoto() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
     if (uid == null) return;
     
     try {
@@ -173,34 +175,52 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
       if (image == null) return;
       
       final bytes = await image.readAsBytes();
-      final extension = image.name.split('.').last;
+      final extension = image.name.contains('.')
+          ? image.name.split('.').last.toLowerCase()
+          : 'jpg';
+      final contentType = switch (extension) {
+        'png' => 'image/png',
+        'gif' => 'image/gif',
+        'webp' => 'image/webp',
+        'heic' => 'image/heic',
+        'heif' => 'image/heif',
+        _ => 'image/jpeg',
+      };
       
       setState(() => _loading = true);
       
       final url = await _storage.uploadProfilePhoto(
         uid: uid,
         bytes: bytes,
-        contentType: 'image/$extension',
+        contentType: contentType,
       );
 
-      await FirebaseAuth.instance.currentUser?.updatePhotoURL(url);
-      await FirebaseAuth.instance.currentUser?.reload();
-      
+      await user?.updatePhotoURL(url);
+      await user?.reload();
+
+      if (!mounted) return;
       setState(() => _photoUrl = url);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile photo updated'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile photo updated'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
       if (mounted) {
+        var message = 'Error uploading photo: $e';
+        if (e is PlatformException) {
+          final normalized =
+              '${e.code} ${e.message ?? ''}'.toLowerCase();
+          if (normalized.contains('denied') ||
+              normalized.contains('permission')) {
+            message =
+                'Photo access was denied. Please enable photo permission in app settings and try again.';
+          }
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error uploading photo: $e'),
+            content: Text(message),
             backgroundColor: Colors.red,
           ),
         );

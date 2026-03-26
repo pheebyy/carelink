@@ -128,8 +128,10 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
                 
                 // Sort by lastMessageTime in Dart (since we can't use orderBy with arrayContains)
                 docs.sort((a, b) {
-                  final timeA = (a['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
-                  final timeB = (b['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+                  final dataA = a.data();
+                  final dataB = b.data();
+                  final timeA = (dataA['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+                  final timeB = (dataB['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
                   return timeB.compareTo(timeA); // Descending order (newest first)
                 });
                 
@@ -168,7 +170,11 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
                   itemBuilder: (context, index) {
                     final d = docs[index].data();
                     final conversationId = docs[index].id;
-                    final unread = (d['unreadCount']?[uid] ?? 0) as int;
+                    final unreadMap = d['unreadCount'] as Map<dynamic, dynamic>?;
+                    final unreadRaw = unreadMap?[uid];
+                    final unread = unreadRaw is int
+                        ? unreadRaw
+                        : int.tryParse(unreadRaw?.toString() ?? '0') ?? 0;
                     final lastMessage = d['lastMessage'] ?? 'No messages yet';
                     final lastMessageTime = d['lastMessageTime'] as Timestamp?;
                     final participantNames = d['participantNames'] as List<dynamic>? ?? [];

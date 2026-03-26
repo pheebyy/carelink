@@ -1,31 +1,139 @@
 const functions = require("firebase-functions/v2");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
-const { onCall } = require("firebase-functions/v2/https");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const axios = require("axios");
-require("dotenv").config(); // ✅ Load .env variables
+require("dotenv").config(); //loads dotenv variables
 
 admin.initializeApp();
 const db = admin.firestore();
+const ADMIN_BOOTSTRAP_TOKEN = defineSecret("ADMIN_BOOTSTRAP_TOKEN");
+const PAYSTACK_API_SECRET = defineSecret("PAYSTACK_SECRET_KEY");
 
-// ✅ Securely load Paystack key from .env
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+// One-time bootstrap for the very first admin account.
+// Requires ADMIN_BOOTSTRAP_TOKEN runtime env var and a matching token in request.data.
+exports.bootstrapFirstAdmin = onCall({ secrets: [ADMIN_BOOTSTRAP_TOKEN] }, async (request) => {
+  const configuredToken = ADMIN_BOOTSTRAP_TOKEN.value();
+  if (!configuredToken) {
+    throw new HttpsError(
+      "failed-precondition",
+      "ADMIN_BOOTSTRAP_TOKEN is not configured."
+    );
+  }
+
+  const { uid, bootstrapToken } = request.data || {};
+  if (!uid || !bootstrapToken) {
+    throw new HttpsError(
+      "invalid-argument",
+      "uid and bootstrapToken are required."
+    );
+  }
+
+  if (bootstrapToken !== configuredToken) {
+    throw new HttpsError(
+      "permission-denied",
+      "Invalid bootstrap token."
+    );
+  }
+
+  const existingAdmin = await db
+    .collection("users")
+    .where("role", "==", "admin")
+    .limit(1)
+    .get();
+
+  if (!existingAdmin.empty) {
+    throw new HttpsError(
+      "failed-precondition",
+      "An admin already exists. Use setAdminRole instead."
+    );
+  }
+
+  await admin.auth().setCustomUserClaims(uid, { admin: true });
+
+  await db.collection("users").doc(uid).set(
+    {
+      role: "admin",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  return { success: true, uid, admin: true };
+});
+
+// 🔐 Set or remove admin role using Firebase Auth custom claims.
+// Only callers that already have admin claim can invoke this function.
+exports.setAdminRole = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError(
+      "permission-denied",
+      "Authentication is required."
+    );
+  }
+
+  const callerHasClaim = request.auth.token.admin === true;
+  let callerHasRole = false;
+  if (!callerHasClaim) {
+    const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+    const callerData = callerDoc.data() || {};
+    callerHasRole = (callerData.role || "").toLowerCase() === "admin";
+  }
+
+  if (!callerHasClaim && !callerHasRole) {
+    throw new HttpsError(
+      "permission-denied",
+      "Only admins can set admin roles."
+    );
+  }
+
+  const { uid, isAdmin } = request.data || {};
+  if (!uid || typeof isAdmin !== "boolean") {
+    throw new HttpsError(
+      "invalid-argument",
+      "uid and isAdmin(boolean) are required."
+    );
+  }
+
+  await admin.auth().setCustomUserClaims(uid, { admin: isAdmin });
+
+  await db.collection("users").doc(uid).set(
+    {
+      role: isAdmin ? "admin" : "user",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  return { success: true, uid, admin: isAdmin };
+});
+
+function getPaystackSecret() {
+  // Prefer Secret Manager in production; fallback to .env for emulator/local runs.
+  return PAYSTACK_API_SECRET.value() || process.env.PAYSTACK_SECRET_KEY || "";
+}
 
 // 🔹 Initialize Paystack Transaction
-exports.initializeTransaction = onCall(async (request) => {
+exports.initializeTransaction = onCall({ secrets: [PAYSTACK_API_SECRET] }, async (request) => {
   const { email, amount, reference, channels, metadata } = request.data;
 
   if (!email || !amount || !reference) {
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "invalid-argument",
       "Missing required parameters: email, amount, or reference."
     );
   }
 
   try {
+    const paystackSecret = getPaystackSecret();
+    if (!paystackSecret) {
+      throw new HttpsError("failed-precondition", "PAYSTACK_SECRET_KEY is not configured.");
+    }
+
     const url = "https://api.paystack.co/transaction/initialize";
     const headers = {
-      Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+      Authorization: `Bearer ${paystackSecret}`,
       "Content-Type": "application/json",
     };
 
@@ -46,8 +154,11 @@ exports.initializeTransaction = onCall(async (request) => {
       data: response.data.data,
     };
   } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
     console.error("Error initializing transaction:", error.response?.data || error.message);
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "internal",
       error.response?.data?.message || "Failed to initialize transaction"
     );
@@ -55,10 +166,10 @@ exports.initializeTransaction = onCall(async (request) => {
 });
 
 // 🔹 Verify Paystack Transaction
-async function verifyPaystackPayment(reference) {
+async function verifyPaystackPayment(reference, paystackSecret) {
   const url = `https://api.paystack.co/transaction/verify/${reference}`;
   const headers = {
-    Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+    Authorization: `Bearer ${paystackSecret}`,
   };
 
   const response = await axios.get(url, { headers });
@@ -66,18 +177,23 @@ async function verifyPaystackPayment(reference) {
 }
 
 // 🔹 Main Firebase Function
-exports.verifyTransaction = onCall(async (request) => {
+exports.verifyTransaction = onCall({ secrets: [PAYSTACK_API_SECRET] }, async (request) => {
   const { reference, userId, role } = request.data;
 
   if (!reference || !userId) {
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "invalid-argument",
       "Missing reference or userId."
     );
   }
 
   try {
-    const verification = await verifyPaystackPayment(reference);
+    const paystackSecret = getPaystackSecret();
+    if (!paystackSecret) {
+      throw new HttpsError("failed-precondition", "PAYSTACK_SECRET_KEY is not configured.");
+    }
+
+    const verification = await verifyPaystackPayment(reference, paystackSecret);
     const status = verification.data.status;
 
     if (status !== "success") {
@@ -152,8 +268,11 @@ exports.verifyTransaction = onCall(async (request) => {
       },
     };
   } catch (error) {
-    console.error("❌ Verification error:", error.message);
-    throw new functions.https.HttpsError(
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    console.error(" Verification error:", error.message);
+    throw new HttpsError(
       "internal",
       "Payment verification failed."
     );
@@ -165,7 +284,7 @@ exports.logPaymentFailure = onCall(async (request) => {
   const { reference, reason, timestamp } = request.data || {};
 
   if (!reference || !reason) {
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "invalid-argument",
       "Missing reference or reason."
     );
@@ -182,7 +301,7 @@ exports.logPaymentFailure = onCall(async (request) => {
     return { success: true };
   } catch (error) {
     console.error("Error logging payment failure:", error.message);
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "internal",
       "Failed to log payment failure."
     );
@@ -331,10 +450,10 @@ exports.onNewMessage = onDocumentCreated(
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      console.log("✅ Push notifications sent successfully");
+      console.log(" Push notifications sent successfully");
       return null;
     } catch (error) {
-      console.error("❌ Error sending push notification:", error);
+      console.error(" Error sending push notification:", error);
       return null;
     }
   }

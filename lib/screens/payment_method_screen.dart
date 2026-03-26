@@ -39,8 +39,15 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
   Future<void> _initializePayment() async {
     // Get user email
     final user = FirebaseAuth.instance.currentUser;
+    final resolvedEmail = widget.email ?? user?.email;
+
+    // Some auth providers do not expose email; use a deterministic fallback.
+    final safeEmail = (resolvedEmail != null && resolvedEmail.trim().isNotEmpty)
+        ? resolvedEmail.trim()
+        : '${user?.uid ?? 'guest'}@carelink.app';
+
     setState(() {
-      _userEmail = widget.email ?? user?.email ?? '';
+      _userEmail = safeEmail;
     });
 
     // Load saved cards

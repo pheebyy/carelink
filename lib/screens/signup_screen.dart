@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:carelink/widgets/auth_ui_tokens.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -20,8 +21,13 @@ class _SignupScreenState extends State<SignupScreen> {
 
   late final GlobalKey<FormState> _formKey;
   late final TextEditingController _emailController;
+  late final TextEditingController _phoneController;
   late final TextEditingController _passwordController;
   late final TextEditingController _confirmPasswordController;
+  late final FocusNode _emailFocus;
+  late final FocusNode _phoneFocus;
+  late final FocusNode _passwordFocus;
+  late final FocusNode _confirmPasswordFocus;
 
   bool _isLoading = false;
   bool _hidePassword = true;
@@ -42,8 +48,13 @@ class _SignupScreenState extends State<SignupScreen> {
     
     _formKey = GlobalKey<FormState>();
     _emailController = TextEditingController();
+    _phoneController = TextEditingController();
     _passwordController = TextEditingController();
     _confirmPasswordController = TextEditingController();
+    _emailFocus = FocusNode();
+    _phoneFocus = FocusNode();
+    _passwordFocus = FocusNode();
+    _confirmPasswordFocus = FocusNode();
     
     _passwordController.addListener(_validatePasswordStrength);
   }
@@ -51,8 +62,13 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   void dispose() {
     _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _emailFocus.dispose();
+    _phoneFocus.dispose();
+    _passwordFocus.dispose();
+    _confirmPasswordFocus.dispose();
     super.dispose();
   }
 
@@ -150,6 +166,7 @@ class _SignupScreenState extends State<SignupScreen> {
       // Store user info in Firestore
       await _firestore.collection('users').doc(uid).set({
         'email': _emailController.text.trim(),
+        'phone': _phoneController.text.trim(),
         'role': _selectedRole!.toLowerCase(),
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -272,42 +289,49 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: AuthUiTokens.screenBackground,
       appBar: _buildAppBar(),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              const SizedBox(height: 20),
-              _buildLogo(),
-              const SizedBox(height: 24),
-              _buildHeader(),
-              const SizedBox(height: 32),
-              _buildEmailField(),
-              const SizedBox(height: 20),
-              _buildPasswordField(),
-              const SizedBox(height: 12),
-              if (_passwordController.text.isNotEmpty)
-                _buildPasswordStrengthBar(),
-              const SizedBox(height: 20),
-              _buildConfirmPasswordField(),
-              const SizedBox(height: 20),
-              _buildRoleDropdown(),
-              const SizedBox(height: 24),
-              if (_errorMessage != null) ...[
-                _buildErrorBox(),
-                const SizedBox(height: 24),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AuthUiTokens.horizontalPadding,
+          vertical: AuthUiTokens.sectionGap,
+        ),
+        child: AutofillGroup(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                SizedBox(height: MediaQuery.of(context).size.height < 700 ? 8 : 20),
+                _buildLogo(),
+                const SizedBox(height: 20),
+                _buildHeader(),
+                const SizedBox(height: 28),
+                _buildEmailField(),
+                const SizedBox(height: 18),
+                _buildPhoneField(),
+                const SizedBox(height: 18),
+                _buildPasswordField(),
+                const SizedBox(height: 10),
+                if (_passwordController.text.isNotEmpty)
+                  _buildPasswordStrengthBar(),
+                const SizedBox(height: 18),
+                _buildConfirmPasswordField(),
+                const SizedBox(height: 18),
+                _buildRoleDropdown(),
+                const SizedBox(height: 22),
+                if (_errorMessage != null) ...[
+                  _buildErrorBox(),
+                  const SizedBox(height: 20),
+                ],
+                _buildSignUpButton(),
+                const SizedBox(height: 18),
+                _buildDivider(),
+                const SizedBox(height: 18),
+                _buildGoogleButton(),
+                const SizedBox(height: 18),
+                _buildSignInLink(),
               ],
-              _buildSignUpButton(),
-              const SizedBox(height: 20),
-              _buildDivider(),
-              const SizedBox(height: 20),
-              _buildGoogleButton(),
-              const SizedBox(height: 20),
-              _buildSignInLink(),
-            ],
+            ),
           ),
         ),
       ),
@@ -317,7 +341,7 @@ class _SignupScreenState extends State<SignupScreen> {
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       title: const Text('Create Account'),
-      backgroundColor: Colors.green,
+      backgroundColor: AuthUiTokens.primary,
       elevation: 0,
       centerTitle: true,
     );
@@ -373,20 +397,23 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget _buildEmailField() {
     return TextFormField(
       controller: _emailController,
+      focusNode: _emailFocus,
       keyboardType: TextInputType.emailAddress,
       textInputAction: TextInputAction.next,
+      autofillHints: const [AutofillHints.username, AutofillHints.email],
+      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_phoneFocus),
       onChanged: (_) => _clearError(),
       decoration: InputDecoration(
         labelText: 'Email',
         hintText: 'you@example.com',
-        prefixIcon: const Icon(Icons.email_outlined, color: Colors.green),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        prefixIcon: const Icon(Icons.email_outlined, color: AuthUiTokens.primary),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius)),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
           borderSide: const BorderSide(color: Colors.green, width: 2),
         ),
       ),
@@ -402,31 +429,74 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
+  Widget _buildPhoneField() {
+    return TextFormField(
+      controller: _phoneController,
+      focusNode: _phoneFocus,
+      keyboardType: TextInputType.phone,
+      textInputAction: TextInputAction.next,
+      autofillHints: const [AutofillHints.telephoneNumber],
+      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocus),
+      onChanged: (_) => _clearError(),
+      decoration: InputDecoration(
+        labelText: 'Phone Number',
+        hintText: '+254712345678',
+        prefixIcon: const Icon(Icons.phone_outlined, color: AuthUiTokens.primary),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
+          borderSide: const BorderSide(color: Colors.green, width: 2),
+        ),
+      ),
+      validator: (value) {
+        final input = value?.trim() ?? '';
+        if (input.isEmpty) {
+          return 'Please enter your phone number';
+        }
+
+        final digitsOnly = input.replaceAll(RegExp(r'\D'), '');
+        if (digitsOnly.length < 9 || digitsOnly.length > 15) {
+          return 'Enter a valid phone number';
+        }
+
+        return null;
+      },
+    );
+  }
+
   Widget _buildPasswordField() {
     return TextFormField(
       controller: _passwordController,
+      focusNode: _passwordFocus,
       obscureText: _hidePassword,
       textInputAction: TextInputAction.next,
+      autofillHints: const [AutofillHints.newPassword],
+      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_confirmPasswordFocus),
       onChanged: (_) => _clearError(),
       decoration: InputDecoration(
         labelText: 'Password',
-        prefixIcon: const Icon(Icons.lock_outline, color: Colors.green),
+        prefixIcon: const Icon(Icons.lock_outline, color: AuthUiTokens.primary),
         suffixIcon: IconButton(
+          tooltip: _hidePassword ? 'Show password' : 'Hide password',
           icon: Icon(
             _hidePassword ? Icons.visibility_off : Icons.visibility,
-            color: Colors.green,
+            color: AuthUiTokens.primary,
           ),
           onPressed: () {
             setState(() => _hidePassword = !_hidePassword);
           },
         ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius)),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
           borderSide: const BorderSide(color: Colors.green, width: 2),
         ),
       ),
@@ -445,28 +515,36 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget _buildConfirmPasswordField() {
     return TextFormField(
       controller: _confirmPasswordController,
+      focusNode: _confirmPasswordFocus,
       obscureText: _hideConfirmPassword,
       textInputAction: TextInputAction.done,
+      autofillHints: const [AutofillHints.newPassword],
+      onFieldSubmitted: (_) {
+        if (!_isLoading) {
+          _registerUser();
+        }
+      },
       onChanged: (_) => _clearError(),
       decoration: InputDecoration(
         labelText: 'Confirm Password',
-        prefixIcon: const Icon(Icons.lock_outline, color: Colors.green),
+        prefixIcon: const Icon(Icons.lock_outline, color: AuthUiTokens.primary),
         suffixIcon: IconButton(
+          tooltip: _hideConfirmPassword ? 'Show password' : 'Hide password',
           icon: Icon(
             _hideConfirmPassword ? Icons.visibility_off : Icons.visibility,
-            color: Colors.green,
+            color: AuthUiTokens.primary,
           ),
           onPressed: () {
             setState(() => _hideConfirmPassword = !_hideConfirmPassword);
           },
         ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius)),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
           borderSide: const BorderSide(color: Colors.green, width: 2),
         ),
       ),
@@ -507,18 +585,18 @@ class _SignupScreenState extends State<SignupScreen> {
     return DropdownButtonFormField<String>(
       decoration: InputDecoration(
         labelText: 'Select your role',
-        prefixIcon: const Icon(Icons.person_outline, color: Colors.green),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        prefixIcon: const Icon(Icons.person_outline, color: AuthUiTokens.primary),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius)),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
           borderSide: const BorderSide(color: Colors.green, width: 2),
         ),
       ),
-      value: _selectedRole,
+      initialValue: _selectedRole,
       items: _roles
           .map((role) => DropdownMenuItem(
                 value: role,
@@ -535,24 +613,28 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Widget _buildErrorBox() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        border: Border.all(color: Colors.red.shade200),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline, color: Colors.red.shade600),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _errorMessage!,
-              style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+    return Semantics(
+      label: 'Signup error',
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50,
+          border: Border.all(color: Colors.red.shade200),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red.shade600),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _errorMessage!,
+                style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -560,16 +642,16 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget _buildSignUpButton() {
     return SizedBox(
       width: double.infinity,
-      height: 52,
+      height: AuthUiTokens.buttonHeight,
       child: ElevatedButton(
         onPressed: _isLoading ? null : _registerUser,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.green,
+          backgroundColor: AuthUiTokens.primary,
           disabledBackgroundColor: Colors.green.shade200,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
           ),
-          elevation: 2,
+          elevation: AuthUiTokens.subtleElevation,
         ),
         child: _isLoading
             ? const SizedBox(
@@ -611,13 +693,13 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget _buildGoogleButton() {
     return SizedBox(
       width: double.infinity,
-      height: 52,
+      height: AuthUiTokens.buttonHeight,
       child: OutlinedButton.icon(
         onPressed: _isLoading ? null : _signupWithGoogle,
         style: OutlinedButton.styleFrom(
           side: BorderSide(color: Colors.grey.shade300),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
           ),
         ),
         icon: _buildGoogleIcon(),
@@ -655,7 +737,7 @@ class _SignupScreenState extends State<SignupScreen> {
           child: const Text(
             'Sign In',
             style: TextStyle(
-              color: Colors.green,
+              color: AuthUiTokens.primary,
               fontWeight: FontWeight.bold,
               fontSize: 14,
             ),
