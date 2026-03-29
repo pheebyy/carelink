@@ -27,6 +27,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
+
+  /// True while we are silently checking whether a session already exists.
+  /// The entire login UI is hidden until this check finishes, preventing any
+  /// visual flash of the login form before the automatic redirect fires.
+  bool _isCheckingSession = true;
+
   String? _errorMessage;
 
   bool _showPassword = false;
@@ -54,12 +60,34 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  /// 🔍 Check if user is already logged in
-  void _checkIfUserLoggedIn() {
-    final currentUser = _auth.currentUser;
-    if (currentUser != null && currentUser.emailVerified) {
-      // User is logged in and verified, navigate to appropriate dashboard
-      _routePostLogin(currentUser);
+  // Checks Firebase for an existing, verified session.
+ 
+  Future<void> _checkIfUserLoggedIn() async {
+    try {
+      final currentUser = _auth.currentUser;
+
+      if (currentUser != null) {
+        // Reload to get the freshest email-verification status from Firebase.
+        await currentUser.reload();
+        final refreshedUser = _auth.currentUser;
+
+        if (refreshedUser != null && refreshedUser.emailVerified) {
+          // A valid, verified session exists — redirect immediately.
+          // We intentionally do NOT flip _isCheckingSession here because the
+          // widget is about to be replaced by a dashboard screen.
+          await _routePostLogin(refreshedUser);
+          return; // Exit early; setState below must not run after navigation.
+        }
+      }
+    } catch (_) {
+      // Network or Firebase error — fall through and show the login form.
+    }
+
+    // No active session (or unverified) — reveal the login form.
+    if (mounted) {
+      setState(() {
+        _isCheckingSession = false;
+      });
     }
   }
 
@@ -132,16 +160,17 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  /// ⏱️ Check if account is locked due to failed attempts
+  // Check if account is locked due to failed attempts
   bool _isAccountLocked() {
     if (_lockedUntil == null) return false;
-    
+
     final now = DateTime.now();
     if (now.isBefore(_lockedUntil!)) {
       final remaining = _lockedUntil!.difference(now);
       final minutes = remaining.inMinutes;
       final seconds = remaining.inSeconds % 60;
-      final countdown = '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+      final countdown =
+          '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
       _lockoutCountdown = countdown;
       _errorMessage = 'Account locked. Try again in $countdown.';
       return true;
@@ -173,18 +202,19 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  /// 📊 Track failed login attempts
+  // Track failed login attempts
   void _recordFailedAttempt() {
     _failedAttempts++;
     if (_failedAttempts >= _maxFailedAttempts) {
-      _lockedUntil = DateTime.now().add(Duration(minutes: _lockoutDurationMinutes));
+      _lockedUntil =
+          DateTime.now().add(Duration(minutes: _lockoutDurationMinutes));
       _errorMessage = 'Too many failed attempts. Account locked temporarily.';
       _isAccountLocked();
       _startLockoutTicker();
     }
   }
 
-  /// ✅ Reset failed attempts on successful login
+  // Resets failed attempts on successful login
   void _resetFailedAttempts() {
     _failedAttempts = 0;
     _lockedUntil = null;
@@ -192,7 +222,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _lockoutTimer?.cancel();
   }
 
-  /// 🔑 Redirects users to dashboard based on their role
+  // Redirects users to dashboard based on their role
   Future<void> _routePostLogin(User user) async {
     try {
       // Reload user to get latest email verification status
@@ -201,7 +231,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      // 📨 Require email verification before proceeding
+      //  Require email verification before proceeding
       if (refreshed != null && !refreshed.emailVerified) {
         await _promptEmailVerification(refreshed);
         // Sign out the user since email is not verified
@@ -225,7 +255,7 @@ class _LoginScreenState extends State<LoginScreen> {
         await LocationTrackingService.instance.startTracking(user.uid);
       }
 
-      // 🚪 Navigate according to role
+      //  Navigate according to role
       if (role == 'caregiver') {
         Navigator.pushReplacement(
           context,
@@ -240,7 +270,9 @@ class _LoginScreenState extends State<LoginScreen> {
         // Role not set, show error
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User role not configured. Please contact support.')),
+            const SnackBar(
+                content: Text(
+                    'User role not configured. Please contact support.')),
           );
         }
       }
@@ -285,12 +317,13 @@ class _LoginScreenState extends State<LoginScreen> {
     } on FirebaseAuthException catch (e) {
       // Record failed attempt
       _recordFailedAttempt();
-      
+
       setState(() {
         _errorMessage = _friendlyAuthError(e);
         // If account locked, update message
         if (_isAccountLocked()) {
-          _errorMessage = 'Too many failed attempts. Account locked for $_lockoutDurationMinutes minutes.';
+          _errorMessage =
+              'Too many failed attempts. Account locked for $_lockoutDurationMinutes minutes.';
         }
       });
     } catch (e) {
@@ -308,6 +341,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ── Session check splash ──────────────────────────────────────────────────
+    // Show a plain green splash while we silently verify the existing session.
+    // This prevents the login form from flashing on screen before the
+    // automatic redirect to a dashboard fires.
+    if (_isCheckingSession) {
+      return Scaffold(
+        backgroundColor: Colors.green.shade600,
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: Colors.white,
+            strokeWidth: 3,
+          ),
+        ),
+      );
+    }
+
+    // ── Normal login UI ───────────────────────────────────────────────────────
     return Scaffold(
       backgroundColor: AuthUiTokens.screenBackground,
       body: Stack(
@@ -324,7 +374,8 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AuthUiTokens.horizontalPadding),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AuthUiTokens.horizontalPadding),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -374,15 +425,20 @@ class _LoginScreenState extends State<LoginScreen> {
           SafeArea(
             child: SingleChildScrollView(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AuthUiTokens.horizontalPadding),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AuthUiTokens.horizontalPadding),
                 child: Column(
                   children: [
-                    SizedBox(height: MediaQuery.of(context).size.height < 700 ? 140 : 180),
+                    SizedBox(
+                        height:
+                            MediaQuery.of(context).size.height < 700 ? 140 : 180),
                     Container(
-                      padding: const EdgeInsets.all(AuthUiTokens.horizontalPadding),
+                      padding:
+                          const EdgeInsets.all(AuthUiTokens.horizontalPadding),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(AuthUiTokens.cardRadius),
+                        borderRadius:
+                            BorderRadius.circular(AuthUiTokens.cardRadius),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.08),
@@ -402,25 +458,33 @@ class _LoginScreenState extends State<LoginScreen> {
                               focusNode: _emailFocus,
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
-                              autofillHints: const [AutofillHints.username, AutofillHints.email],
-                              onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocus),
+                              autofillHints: const [
+                                AutofillHints.username,
+                                AutofillHints.email
+                              ],
+                              onFieldSubmitted: (_) =>
+                                  FocusScope.of(context)
+                                      .requestFocus(_passwordFocus),
                               decoration: InputDecoration(
                                 labelText: "Email Address",
                                 hintText: "Enter your email",
                                 prefixIcon: const Icon(Icons.email_outlined,
                                     color: AuthUiTokens.primary),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
+                                  borderRadius: BorderRadius.circular(
+                                      AuthUiTokens.inputRadius),
                                   borderSide: BorderSide(
                                       color: Colors.grey.shade300, width: 1.5),
                                 ),
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
+                                  borderRadius: BorderRadius.circular(
+                                      AuthUiTokens.inputRadius),
                                   borderSide: BorderSide(
                                       color: Colors.grey.shade300, width: 1.5),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
+                                  borderRadius: BorderRadius.circular(
+                                      AuthUiTokens.inputRadius),
                                   borderSide: const BorderSide(
                                       color: Colors.green, width: 2),
                                 ),
@@ -458,9 +522,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                 labelText: "Password",
                                 hintText: "Enter your password",
                                 prefixIcon: const Icon(Icons.lock_outline,
-                                  color: AuthUiTokens.primary),
+                                    color: AuthUiTokens.primary),
                                 suffixIcon: IconButton(
-                                  tooltip: _showPassword ? 'Hide password' : 'Show password',
+                                  tooltip: _showPassword
+                                      ? 'Hide password'
+                                      : 'Show password',
                                   icon: Icon(
                                     _showPassword
                                         ? Icons.visibility
@@ -474,17 +540,20 @@ class _LoginScreenState extends State<LoginScreen> {
                                   },
                                 ),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
+                                  borderRadius: BorderRadius.circular(
+                                      AuthUiTokens.inputRadius),
                                   borderSide: BorderSide(
                                       color: Colors.grey.shade300, width: 1.5),
                                 ),
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
+                                  borderRadius: BorderRadius.circular(
+                                      AuthUiTokens.inputRadius),
                                   borderSide: BorderSide(
                                       color: Colors.grey.shade300, width: 1.5),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
+                                  borderRadius: BorderRadius.circular(
+                                      AuthUiTokens.inputRadius),
                                   borderSide: const BorderSide(
                                       color: Colors.green, width: 2),
                                 ),
@@ -538,7 +607,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               duration: const Duration(milliseconds: 300),
                               child: _errorMessage != null
                                   ? Padding(
-                                      padding: const EdgeInsets.only(bottom: 16.0),
+                                      padding:
+                                          const EdgeInsets.only(bottom: 16.0),
                                       child: Semantics(
                                         label: 'Login error',
                                         liveRegion: true,
@@ -546,7 +616,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                           padding: const EdgeInsets.all(14),
                                           decoration: BoxDecoration(
                                             color: Colors.red.shade50,
-                                            borderRadius: BorderRadius.circular(10),
+                                            borderRadius:
+                                                BorderRadius.circular(10),
                                             border: Border.all(
                                               color: Colors.red.shade300,
                                               width: 1.2,
@@ -555,7 +626,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                           child: Row(
                                             children: [
                                               Icon(Icons.error_rounded,
-                                                  color: Colors.red.shade700, size: 20),
+                                                  color: Colors.red.shade700,
+                                                  size: 20),
                                               const SizedBox(width: 12),
                                               Expanded(
                                                 child: Text(
@@ -580,7 +652,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 padding: const EdgeInsets.only(bottom: 12),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.lock_clock, size: 16, color: Colors.red),
+                                    const Icon(Icons.lock_clock,
+                                        size: 16, color: Colors.red),
                                     const SizedBox(width: 8),
                                     Text(
                                       'Locked for ${_lockoutCountdown ?? '--:--'}',
@@ -606,7 +679,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 borderRadius: BorderRadius.circular(14),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.green.withValues(alpha: _isLoading ? 0.08 : 0.2),
+                                    color: Colors.green.withValues(
+                                        alpha: _isLoading ? 0.08 : 0.2),
                                     blurRadius: 8,
                                     spreadRadius: 0,
                                     offset: const Offset(0, 3),
@@ -614,20 +688,24 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ],
                               ),
                               child: ElevatedButton(
-                                onPressed: (_isLoading || _currentlyLocked) ? null : _loginUser,
+                                onPressed: (_isLoading || _currentlyLocked)
+                                    ? null
+                                    : _loginUser,
                                 style: ElevatedButton.styleFrom(
-                                  minimumSize:
-                                      const Size(double.infinity, AuthUiTokens.buttonHeight + 6),
+                                  minimumSize: const Size(double.infinity,
+                                      AuthUiTokens.buttonHeight + 6),
                                   backgroundColor: Colors.transparent,
                                   shadowColor: Colors.transparent,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius + 2),
+                                    borderRadius: BorderRadius.circular(
+                                        AuthUiTokens.inputRadius + 2),
                                   ),
                                   disabledBackgroundColor: Colors.grey.shade300,
                                 ),
                                 child: _isLoading
                                     ? Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
                                           const SizedBox(
                                             height: 22,
@@ -643,7 +721,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                             style: TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold,
-                                              color: Colors.white.withValues(alpha: 0.9),
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.9),
                                             ),
                                           ),
                                         ],
@@ -702,14 +781,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                 );
                               },
                               style: OutlinedButton.styleFrom(
-                                minimumSize:
-                                    const Size(double.infinity, AuthUiTokens.buttonHeight),
+                                minimumSize: const Size(
+                                    double.infinity, AuthUiTokens.buttonHeight),
                                 side: const BorderSide(
                                   color: AuthUiTokens.primary,
                                   width: 2,
                                 ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(AuthUiTokens.inputRadius),
+                                  borderRadius: BorderRadius.circular(
+                                      AuthUiTokens.inputRadius),
                                 ),
                               ),
                               child: const Text(

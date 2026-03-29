@@ -30,12 +30,14 @@ class AuthService {
   Future<UserCredential> signup({
     required String email,
     required String password,
+    required String phone,
     required String role, // 'caregiver' | 'client'
   }) async {
     final cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
 
     await _firestore.collection('users').doc(cred.user!.uid).set({
       'email': email,
+      'phone': phone,
       'role': role,
       'gpsTrackingEnabled': false,
       'createdAt': FieldValue.serverTimestamp(),
