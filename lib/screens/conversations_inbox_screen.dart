@@ -118,6 +118,35 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: stream,
               builder: (context, snap) {
+                if (snap.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error loading conversations',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          snap.error.toString(),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
                 if (!snap.hasData) {
                   return const Center(
                     child: CircularProgressIndicator(color: Colors.green),

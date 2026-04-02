@@ -537,6 +537,7 @@ class FirestoreService {
   Future<void> sendConversationMessage({
     required String conversationId,
     required String senderId,
+    required String senderName,
     required String text,
   }) async {
     try {
@@ -549,14 +550,16 @@ class FirestoreService {
           _db.collection('conversations').doc(conversationId);
 
       await _db.runTransaction((txn) async {
-        // Add message to subcollection
+        // Add message to subcollection with all required fields
         await txn.set(
           conversationRef.collection('messages').doc(),
           {
             'senderId': senderId,
+            'senderName': senderName,
             'text': text,
             'timestamp': FieldValue.serverTimestamp(),
             'read': false,
+            'readBy': [senderId],
           },
         );
 
