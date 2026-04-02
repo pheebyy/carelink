@@ -53,6 +53,15 @@
 		<string>CareLink uses your location to match you with nearby care opportunities and keep your profile location updated.</string>
 		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 		<string>CareLink uses your location to keep your availability and job tracking accurate while you are using the app.</string>
+		<!-- BLE permissions for wearable integration -->
+		<key>NSBluetoothAlwaysUsageDescription</key>
+		<string>This app uses Bluetooth to connect to health devices.</string>
+		<key>NSBluetoothPeripheralUsageDescription</key>
+		<string>This app uses Bluetooth to connect to health devices.</string>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>bluetooth-central</string>
+		</array>
 u		<key>NSPhotoLibraryUsageDescription</key>
 		<string>CareLink needs access to your photo library so you can choose a profile picture.</string>
 		<key>NSCameraUsageDescription</key>

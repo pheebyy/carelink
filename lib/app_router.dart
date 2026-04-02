@@ -10,6 +10,7 @@ import 'screens/role_loader_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/role_shell.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/vitals_ble_screen.dart';
 
 
 // ─────────────── Providers ───────────────
@@ -55,6 +56,7 @@ class CarelinkApp extends ConsumerWidget {
         '/onboarding': (context) => const OnboardingScreen(),
         '/caregiver': (context) => const RoleShell(role: 'caregiver'),
         '/client': (context) => const RoleShell(role: 'client'),
+        '/vitals-ble': (context) => const VitalsBleScreen(),
       },
       // handle dynamic routes (e.g., /conversation)
       onGenerateRoute: (settings) {

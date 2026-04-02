@@ -40,6 +40,7 @@ class RoleLoaderScreen extends ConsumerWidget {
     Future.microtask(() async {
       try {
         await NotificationService.instance.ensureUserTokenSaved();
+        await NotificationService.instance.syncMedicationRemindersForUser(user.uid);
       } catch (_) {
         // Ignore silently
       }

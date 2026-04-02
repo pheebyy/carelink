@@ -32,11 +32,11 @@ class PaymentFirestoreService {
       );
 
       await _db.collection('transactions').doc(reference).set(transaction.toMap());
-      print('✅ Transaction created: $reference');
+      print(' Transaction created: $reference');
 
       return transaction;
     } catch (e) {
-      print('🔥 Error creating transaction: $e');
+      print(' Error creating transaction: $e');
       rethrow;
     }
   }
@@ -52,9 +52,9 @@ class PaymentFirestoreService {
         'status': status,
         if (completedAt != null) 'completedAt': Timestamp.fromDate(completedAt),
       });
-      print('✅ Transaction updated: $reference -> $status');
+      print(' Transaction updated: $reference -> $status');
     } catch (e) {
-      print('🔥 Error updating transaction: $e');
+      print(' Error updating transaction: $e');
       rethrow;
     }
   }
@@ -75,7 +75,7 @@ class PaymentFirestoreService {
 
       // Idempotency guard: avoid double wallet credit if completion is retried.
       if (transaction.status == 'completed') {
-        print('ℹ️ Transaction already completed: $reference');
+        print('Transaction already completed: $reference');
         return;
       }
 

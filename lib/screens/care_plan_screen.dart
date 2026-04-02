@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
+import '../services/notification_service.dart';
 
 class CarePlanScreen extends StatefulWidget {
   const CarePlanScreen({super.key});
@@ -13,6 +14,60 @@ class CarePlanScreen extends StatefulWidget {
 class _CarePlanScreenState extends State<CarePlanScreen> {
   final _fs = FirestoreService();
   final _uid = FirebaseAuth.instance.currentUser?.uid;
+
+  static const Set<String> _allowedFrequencies = {
+    'daily',
+    'weekly',
+    'weekdays',
+    'monthly',
+    'as needed',
+  };
+
+  void _showMessage(String text, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor: isError ? Colors.red.shade600 : null,
+      ),
+    );
+  }
+
+  String? _validateCarePlanInputs({
+    required String type,
+    required String title,
+    required String description,
+    required String time,
+    required String frequency,
+  }) {
+    if (title.trim().isEmpty) {
+      return 'Please enter a title';
+    }
+    if (description.trim().length > 280) {
+      return 'Description is too long (max 280 characters)';
+    }
+    if (type == 'medication' && time.trim().isEmpty) {
+      return 'Medication items require a reminder time';
+    }
+
+    final normalizedFrequency = frequency.trim().toLowerCase();
+    if (normalizedFrequency.isNotEmpty &&
+        !_allowedFrequencies.contains(normalizedFrequency)) {
+      return 'Frequency must be: Daily, Weekly, Weekdays, Monthly, or As needed';
+    }
+
+    return null;
+  }
+
+  Future<void> _pickTime(TextEditingController controller) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (picked == null) return;
+    if (!mounted) return;
+
+    controller.text = picked.format(context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -140,8 +195,9 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
               // Checkbox
               Checkbox(
                 value: isCompleted,
-                onChanged: (value) {
-                  _fs.toggleCarePlanCompletion(_uid!, planId, value ?? false);
+                onChanged: (value) async {
+                  await _fs.toggleCarePlanCompletion(_uid!, planId, value ?? false);
+                  await NotificationService.instance.syncMedicationRemindersForUser(_uid);
                 },
                 activeColor: Colors.green,
               ),
@@ -225,6 +281,7 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
     final timeController = TextEditingController();
     final frequencyController = TextEditingController();
     String selectedType = 'medication';
+    bool isSaving = false;
 
     showDialog(
       context: context,
@@ -277,9 +334,12 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                 // Time
                 TextField(
                   controller: timeController,
+                  readOnly: true,
+                  onTap: () => _pickTime(timeController),
                   decoration: const InputDecoration(
                     labelText: 'Time (optional)',
-                    hintText: 'e.g., 9:00 AM',
+                    hintText: 'Tap to choose time',
+                    suffixIcon: Icon(Icons.access_time),
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -289,7 +349,7 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                   controller: frequencyController,
                   decoration: const InputDecoration(
                     labelText: 'Frequency (optional)',
-                    hintText: 'e.g., Daily, Weekly',
+                    hintText: 'Daily, Weekly, Weekdays, Monthly, As needed',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -298,18 +358,27 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: isSaving ? null : () => Navigator.pop(context),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () async {
-                if (titleController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter a title')),
-                  );
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                final validationError = _validateCarePlanInputs(
+                  type: selectedType,
+                  title: titleController.text,
+                  description: descriptionController.text,
+                  time: timeController.text,
+                  frequency: frequencyController.text,
+                );
+
+                if (validationError != null) {
+                  _showMessage(validationError, isError: true);
                   return;
                 }
 
+                setDialogState(() => isSaving = true);
                 try {
                   await _fs.createCarePlan(
                     clientId: _uid!,
@@ -322,22 +391,30 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                         : frequencyController.text.trim(),
                   );
 
+                  await NotificationService.instance.syncMedicationRemindersForUser(_uid);
+
                   if (mounted) {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Care plan added successfully')),
-                    );
+                    _showMessage('Care plan added successfully');
                   }
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e')),
-                    );
+                    _showMessage('Error: $e', isError: true);
+                  }
+                } finally {
+                  if (mounted) {
+                    setDialogState(() => isSaving = false);
                   }
                 }
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              child: const Text('Add'),
+              child: isSaving
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Add'),
             ),
           ],
         ),
@@ -351,6 +428,7 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
     final timeController = TextEditingController(text: plan['time'] ?? '');
     final frequencyController = TextEditingController(text: plan['frequency'] ?? '');
     String selectedType = plan['type'] ?? 'medication';
+    bool isSaving = false;
 
     showDialog(
       context: context,
@@ -403,9 +481,12 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                 // Time
                 TextField(
                   controller: timeController,
+                  readOnly: true,
+                  onTap: () => _pickTime(timeController),
                   decoration: const InputDecoration(
                     labelText: 'Time (optional)',
-                    hintText: 'e.g., 9:00 AM',
+                    hintText: 'Tap to choose time',
+                    suffixIcon: Icon(Icons.access_time),
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -415,7 +496,7 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                   controller: frequencyController,
                   decoration: const InputDecoration(
                     labelText: 'Frequency (optional)',
-                    hintText: 'e.g., Daily, Weekly',
+                    hintText: 'Daily, Weekly, Weekdays, Monthly, As needed',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -424,18 +505,27 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: isSaving ? null : () => Navigator.pop(context),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () async {
-                if (titleController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter a title')),
-                  );
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                final validationError = _validateCarePlanInputs(
+                  type: selectedType,
+                  title: titleController.text,
+                  description: descriptionController.text,
+                  time: timeController.text,
+                  frequency: frequencyController.text,
+                );
+
+                if (validationError != null) {
+                  _showMessage(validationError, isError: true);
                   return;
                 }
 
+                setDialogState(() => isSaving = true);
                 try {
                   await _fs.updateCarePlan(_uid!, planId, {
                     'type': selectedType,
@@ -447,22 +537,30 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                         : frequencyController.text.trim(),
                   });
 
+                  await NotificationService.instance.syncMedicationRemindersForUser(_uid);
+
                   if (mounted) {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Care plan updated successfully')),
-                    );
+                    _showMessage('Care plan updated successfully');
                   }
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e')),
-                    );
+                    _showMessage('Error: $e', isError: true);
+                  }
+                } finally {
+                  if (mounted) {
+                    setDialogState(() => isSaving = false);
                   }
                 }
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              child: const Text('Update'),
+              child: isSaving
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Update'),
             ),
           ],
         ),
@@ -471,39 +569,52 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
   }
 
   void _confirmDelete(String planId, String title) {
+    bool isDeleting = false;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Care Plan'),
-        content: Text('Are you sure you want to delete "$title"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await _fs.deleteCarePlan(_uid!, planId);
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Care plan deleted')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Delete Care Plan'),
+          content: Text('Are you sure you want to delete "$title"?'),
+          actions: [
+            TextButton(
+              onPressed: isDeleting ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isDeleting
+                  ? null
+                  : () async {
+                      setDialogState(() => isDeleting = true);
+                      try {
+                        await _fs.deleteCarePlan(_uid!, planId);
+                        await NotificationService.instance.syncMedicationRemindersForUser(_uid);
+                        if (mounted) {
+                          Navigator.pop(context);
+                          _showMessage('Care plan deleted');
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          Navigator.pop(context);
+                          _showMessage('Error: $e', isError: true);
+                        }
+                      } finally {
+                        if (mounted) {
+                          setDialogState(() => isDeleting = false);
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: isDeleting
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Delete'),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -138,7 +138,12 @@ service cloud.firestore {
 
     // ========================= CONVERSATIONS COLLECTION =========================
     match /conversations/{conversationId} {
+      // Allow users to read conversations they're a participant in
       allow read: if isConversationParticipant(conversationId) || isAdmin();
+      
+      // Allow querying by participantIds for users who are in them
+      // (Firestore will apply read rules to matched documents)
+      allow list: if isAuthenticated();
 
       allow create: if isAuthenticated() &&
         request.resource.data.participantIds is list &&

@@ -1,6 +1,7 @@
 import 'package:carelink/screens/ClientProfileEditScreen.dart';
 import 'package:carelink/screens/ai_assistant_screen.dart';
 import 'package:carelink/screens/conversations_chat_screen.dart';
+import 'package:carelink/screens/vitals_ble_screen.dart';
 import 'package:carelink/screens/conversations_inbox_screen.dart';
 import 'package:carelink/screens/visits_screen.dart';
 import 'package:carelink/screens/search_caregivers_screen.dart';
@@ -28,7 +29,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: const Color(0xFFF4F7FB),
       appBar: _buildAppBar(),
       body: _uid == null
           ? _buildLoginRequiredWidget()
@@ -42,6 +43,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _buildWelcomeHeroCard(),
+                      const SizedBox(height: 14),
+                      _buildVitalsMonitorButton(),
+                      const SizedBox(height: 18),
                       _buildStatsSection(),
                       const SizedBox(height: 24),
                       _buildUpcomingVisitsSection(),
@@ -82,13 +87,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
   // ==================== Build Methods ====================
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF4F7FB),
       elevation: 0,
-      leading: IconButton(
-        icon: Icon(Icons.menu, color: Colors.grey.shade800),
-        onPressed: () => _showSnackBar('Menu coming soon'),
-      ),
-      title: Column(
+      scrolledUnderElevation: 0,
+       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
@@ -115,6 +117,91 @@ class _ClientDashboardState extends State<ClientDashboard> {
           onPressed: () => _showSnackBar('Notifications coming soon'),
         ),
       ],
+    );
+  }
+
+  Widget _buildWelcomeHeroCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.green.shade600, Colors.teal.shade500],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.teal.shade100,
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.favorite_border, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'Today at a glance',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Track health updates, visits, and care tasks in one place.',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVitalsMonitorButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        icon: const Icon(Icons.favorite, color: Colors.red),
+        label: const Text('Monitor Vitals'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.red,
+          side: const BorderSide(color: Color(0xFFF3B2B2)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          elevation: 1,
+          shadowColor: Colors.red.shade100,
+          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+        ),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const VitalsBleScreen()),
+          );
+        },
+      ),
     );
   }
 
@@ -417,8 +504,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
       stream: FirebaseFirestore.instance
           .collection('conversations')
           .where('participantIds', arrayContains: _uid)
-          // Note: Removed orderBy - requires composite index with arrayContains
-          // Instead, sorting is done in Dart below
           .snapshots(),
       builder: (context, snapshot) {
         debugPrint('Messages snapshot state: ${snapshot.connectionState}');
@@ -428,11 +513,19 @@ class _ClientDashboardState extends State<ClientDashboard> {
         }
 
         if (snapshot.hasError) {
-          debugPrint('Messages snapshot error: ${snapshot.error}');
+          final error = snapshot.error.toString();
+          debugPrint('Messages snapshot error: $error');
+          
+          // Check for permission denials
+          bool isPermissionError = error.contains('permission-denied') || error.contains('Permission denied');
+          String errorMessage = isPermissionError 
+              ? 'Permission denied. Check Firestore security rules.'
+              : 'Check your connection and Firestore permissions';
+          
           return _buildErrorState(
             icon: Icons.mail_outline,
             title: 'Unable to load messages',
-            message: 'Check your connection or Firestore permissions',
+            message: errorMessage,
             onRetry: () => setState(() {}),
           );
         }
@@ -442,11 +535,16 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
         // Sort by lastMessageTime in Dart (since we can't use orderBy with arrayContains)
         conversations.sort((a, b) {
-          final dataA = a.data();
-          final dataB = b.data();
-          final timeA = (dataA['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
-          final timeB = (dataB['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
-          return timeB.compareTo(timeA); // Descending order
+          try {
+            final dataA = a.data();
+            final dataB = b.data();
+            final timeA = (dataA['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            final timeB = (dataB['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            return timeB.compareTo(timeA); // Descending order
+          } catch (e) {
+            debugPrint('Error sorting conversations: $e');
+            return 0;
+          }
         });
 
         // Take only first 3
