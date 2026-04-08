@@ -349,7 +349,7 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
       // Navigate to appropriate dashboard
       _navigateToDashboard();
     } catch (e) {
-      _showSnackBar('Error: $e', isError: true);
+      _showSnackBar('Unable to save your profile right now. Please try again.', isError: true);
       debugPrint('Save error: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -369,7 +369,7 @@ class _OnboardingFormScreenState extends State<OnboardingFormScreen> {
       });
       _showSnackBar('Current location captured.');
     } catch (e) {
-      _showSnackBar(e.toString().replaceFirst('Exception: ', ''), isError: true);
+      _showSnackBar('Unable to get your current location. Please check permissions and try again.', isError: true);
     } finally {
       if (mounted) {
         setState(() => _isFetchingLocation = false);

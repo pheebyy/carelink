@@ -121,7 +121,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to save profile right now. Please try again.')),
+      );
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -170,7 +172,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error uploading photo: $e'),
+          content: const Text('Unable to upload photo right now. Please try again.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -315,7 +317,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Error logging out: $e'),
+                      content: const Text('Unable to log out right now. Please try again.'),
                       backgroundColor: Colors.red,
                     ),
                   );

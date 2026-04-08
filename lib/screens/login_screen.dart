@@ -142,7 +142,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Failed to send verification email: $e'),
+                    content: const Text('Unable to send verification email right now. Please try again.'),
                     backgroundColor: Colors.red,
                   ),
                 );
@@ -272,14 +272,14 @@ class _LoginScreenState extends State<LoginScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
                 content: Text(
-                    'User role not configured. Please contact support.')),
+                    'Your account setup is incomplete. Please contact support.')),
           );
         }
       }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error during navigation: $e')),
+        const SnackBar(content: Text('Unable to continue right now. Please try again.')),
       );
     }
   }
@@ -328,7 +328,7 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'An unexpected error occurred: $e';
+        _errorMessage = 'Something went wrong while signing in. Please try again.';
       });
     } finally {
       if (mounted) {

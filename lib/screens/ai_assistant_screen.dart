@@ -106,7 +106,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     } catch (e) {
       setState(() {
         _messages.add(ChatMessage(
-          text: "Sorry, I'm having trouble responding right now. Please try again.\n\nError: $e",
+          text: "Sorry, I'm having trouble responding right now. Please try again in a moment.",
           isUser: false,
           timestamp: DateTime.now(),
         ));

@@ -62,7 +62,7 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading profile: $e')),
+          const SnackBar(content: Text('Unable to load profile right now. Please try again.')),
         );
       }
     }
@@ -148,7 +148,7 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error saving profile: $e'),
+            content: const Text('Unable to save profile right now. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -208,7 +208,7 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
       );
     } catch (e) {
       if (mounted) {
-        var message = 'Error uploading photo: $e';
+        var message = 'Unable to upload photo right now. Please try again.';
         if (e is PlatformException) {
           final normalized =
               '${e.code} ${e.message ?? ''}'.toLowerCase();
@@ -266,7 +266,7 @@ class _ClientProfileEditScreenState extends State<ClientProfileEditScreen> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Error logging out: $e'),
+                      content: const Text('Unable to log out right now. Please try again.'),
                       backgroundColor: Colors.red,
                     ),
                   );

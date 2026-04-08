@@ -308,13 +308,13 @@ class _WithdrawalScreenState extends State<WithdrawalScreen> {
     String message = '';
     Color color = Colors.grey;
 
-    if (amount < 500 && amount > 0) {
-      message = 'Minimum withdrawal is KES 500';
+    if (amount < 100 && amount > 0) {
+      message = 'Minimum withdrawal is KES 100';
       color = Colors.orange;
     } else if (amount > balance) {
       message = 'Amount exceeds available balance';
       color = Colors.red;
-    } else if (amount >= 500 && amount <= balance) {
+    } else if (amount >= 100 && amount <= balance) {
       message = 'Valid amount';
       color = Colors.green;
     }
@@ -364,7 +364,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen> {
         : double.tryParse(_amountController.text);
 
     return amount != null &&
-        amount >= 500 &&
+        amount >= 100 &&
         amount <= balance &&
         _accountNameController.text.isNotEmpty &&
         _accountNumberController.text.isNotEmpty;
@@ -443,24 +443,53 @@ class _WithdrawalScreenState extends State<WithdrawalScreen> {
 
   Future<void> _completeWithdrawal(double amount) async {
     try {
-      // TODO: Implement withdrawal request creation in Firestore
-      // Create withdrawal request document with pending status
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Withdrawal of KES ${amount.toStringAsFixed(2)} requested successfully'),
-          backgroundColor: Colors.green,
-        ),
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not logged in');
+
+      // Call Cloud Function to process withdrawal
+      final result = await _paymentService.requestWithdrawal(
+        caregiverId: user.uid,
+        amount: amount,
+        bank: _selectedBank,
+        accountName: _accountNameController.text.trim(),
+        accountNumber: _accountNumberController.text.trim(),
+        phoneNumber: _selectedBank.contains('M-Pesa') || _selectedBank.contains('Airtel')
+            ? _accountNumberController.text.trim()
+            : null,
       );
 
-      Future.delayed(const Duration(seconds: 2), () {
-        Navigator.pop(context);
-      });
+      if (result != null && result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message'] ?? 
+              'Withdrawal of KES ${amount.toStringAsFixed(2)} requested successfully',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        // Clear form
+        _amountController.clear();
+        _accountNameController.clear();
+        _accountNumberController.clear();
+
+        // Navigate back after delay
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) Navigator.pop(context);
+        });
+      } else {
+        throw Exception(result?['message'] ?? 'Withdrawal failed');
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: $e'),
+          content: Text(
+            'Error: ${e.toString().replaceFirst('Exception: ', '')}',
+          ),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
         ),
       );
     }

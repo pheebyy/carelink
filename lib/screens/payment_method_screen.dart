@@ -544,7 +544,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
       }
     } catch (e) {
       Navigator.pop(context); // Close loading
-      _showError('Error processing payment: $e');
+      _showError('Unable to process payment right now. Please try again.');
     }
   }
 

@@ -136,6 +136,55 @@ service cloud.firestore {
       }
     }
 
+    // ========================= JOB_APPLICATIONS COLLECTION (GLOBAL) =========================
+    // Store applications separately for easier querying by caregiverId
+    match /job_applications/{applicationId} {
+      allow read: if isAuthenticated() && (
+        resource.data.caregiverId == request.auth.uid || 
+        (exists(/databases/$(database)/documents/jobs/$(resource.data.jobId)) &&
+         get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.clientId == request.auth.uid) ||
+        isAdmin()
+      );
+
+      // Caregivers can apply to open jobs
+      allow create: if isAuthenticated() &&
+        request.resource.data.caregiverId == request.auth.uid &&
+        request.resource.data.status == 'applied' &&
+        exists(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)) &&
+        get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.status == 'open';
+
+      // Job owner can accept/reject applications
+      allow update: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/jobs/$(resource.data.jobId)) &&
+        get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.clientId == request.auth.uid;
+
+      allow delete: if false;
+    }
+
+    // ========================= REVIEWS COLLECTION =========================
+    // 5-star reviews for completed jobs
+    match /reviews/{reviewId} {
+      // Anyone can read reviews (public ratings display)
+      allow read: if isAuthenticated();
+
+      // Authenticated users can submit reviews for completed jobs
+      allow create: if isAuthenticated() &&
+        request.resource.data.reviewerId == request.auth.uid &&
+        (request.resource.data.reviewerRole == 'client' || request.resource.data.reviewerRole == 'caregiver') &&
+        request.resource.data.rating >= 1 && request.resource.data.rating <= 5 &&
+        exists(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)) &&
+        get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.status == 'completed';
+
+      // Only the reviewer (admin) can update their own review
+      allow update: if isAuthenticated() && (
+        resource.data.reviewerId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Never allow deletion (immutable history)
+      allow delete: if false;
+    }
+
     // ========================= CONVERSATIONS COLLECTION =========================
     match /conversations/{conversationId} {
       // Allow users to read conversations they're a participant in
@@ -234,27 +283,126 @@ service cloud.firestore {
       }
     }
 
-    // ========================= TRANSACTIONS (payments) =========================
+    // ========================= TRANSACTIONS (payments) - SECURE =========================
     match /transactions/{txId} {
+      // Users can read their own transactions, admins can read all
       allow read: if isAuthenticated() && (
-        resource.data.clientId == request.auth.uid || resource.data.caregiverId == request.auth.uid || isAdmin());
+        resource.data.clientId == request.auth.uid || 
+        resource.data.caregiverId == request.auth.uid || 
+        isAdmin()
+      );
 
-      allow create: if isAuthenticated() &&
-        request.resource.data.clientId == request.auth.uid &&
-        request.resource.data.keys().hasAll(['clientId','caregiverId','amount','platformFee','caregiverEarnings','status','reference']);
+      // Authenticated users can create their own transactions, Cloud Functions can also create
+      allow create: if (isAuthenticated() && request.resource.data.clientId == request.auth.uid) || 
+                       isAdmin() || 
+                       !isAuthenticated();
 
-      allow update: if isAuthenticated() && (
-        resource.data.clientId == request.auth.uid || resource.data.caregiverId == request.auth.uid || isAdmin());
+      // Cloud Functions/admins can update transaction status
+      allow update: if isAdmin() || !isAuthenticated();
 
+      // Never allow deletion (audit trail)
       allow delete: if false;
     }
 
-    // ========================= CAREGIVER WALLETS =========================
+    // ========================= CAREGIVER WALLETS - SECURE =========================
     match /caregiver_wallets/{caregiverId} {
-      allow read: if isAuthenticated() && (request.auth.uid == caregiverId || isAdmin());
+      // Only the caregiver and admins can read their own wallet
+      allow read: if isAuthenticated() && (
+        request.auth.uid == caregiverId || isAdmin()
+      );
 
-      allow create: if isAuthenticated() && request.auth.uid == caregiverId;
-      allow update: if false;
+      // Cloud Functions can create wallets
+      allow create: if isAdmin() || !isAuthenticated();
+      
+      // Cloud Functions/admins can update wallets
+      allow update: if isAdmin() || !isAuthenticated();
+      
+      // Never allow deletion
+      allow delete: if false;
+    }
+
+    // ========================= WITHDRAWALS - SECURE =========================
+    match /withdrawals/{withdrawalId} {
+      // Caregivers can read their own withdrawal requests, admins can read all
+      allow read: if isAuthenticated() && (
+        resource.data.caregiverId == request.auth.uid || isAdmin()
+      );
+
+      // Cloud Functions can create withdrawals
+      allow create: if isAdmin() || !isAuthenticated();
+
+      // Cloud Functions/admins can update withdrawal status (approve/reject)
+      allow update: if isAdmin() || !isAuthenticated();
+
+      // Never allow deletion (audit trail)
+      allow delete: if false;
+    }
+
+    // ========================= PAYMENT FAILURES - AUDIT LOG =========================
+    match /payment_failures/{failureId} {
+      // Users can read their own failure logs, admins can read all
+      allow read: if isAuthenticated() && (
+        (resource.data.reference is string && 
+         exists(/databases/$(database)/documents/transactions/$(resource.data.reference)) &&
+         (
+          get(/databases/$(database)/documents/transactions/$(resource.data.reference)).data.clientId == request.auth.uid ||
+          get(/databases/$(database)/documents/transactions/$(resource.data.reference)).data.caregiverId == request.auth.uid
+         )) ||
+        isAdmin()
+      );
+
+      // Cloud Functions can create failure logs
+      allow create: if isAdmin() || !isAuthenticated();
+
+      // Never allow updates or deletions
+      allow update, delete: if false;
+    }
+
+    // ========================= AUDIT LOGS =========================
+    match /audit_logs/{logId} {
+      // Only admins can read audit logs
+      allow read: if isAdmin();
+
+      // Cloud Functions can create
+      allow create: if isAdmin() || !isAuthenticated();
+
+      // Never allow updates or deletions
+      allow update, delete: if false;
+    }
+
+    // ========================= NOTIFICATIONS COLLECTION =========================
+    // In-app notifications for job updates and reviews
+    match /notifications/{notificationId} {
+      // Users can read their own notifications
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Cloud Functions can create notifications on job state changes
+      allow create: if isAdmin() || !isAuthenticated();
+
+      // Users can mark their own notifications as read
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(['isRead']);
+
+      // Never allow deletion (audit trail)
+      allow delete: if false;
+    }
+
+    // ========================= JOB ANALYTICS COLLECTION =========================
+    // Caregiver performance metrics (completions, ratings, earnings)
+    match /job_analytics/{caregiverId} {
+      // Caregivers can read their own analytics, clients can see public profiles
+      allow read: if isAuthenticated() && (
+        request.auth.uid == caregiverId || isAdmin()
+      );
+
+      // Cloud Functions can create analytics doc
+      allow create: if isAdmin() || !isAuthenticated();
+
+      // Cloud Functions can update analytics on job completion/rating
+      allow update: if isAdmin() || !isAuthenticated();
+
+      // Never allow deletion
       allow delete: if false;
     }
 

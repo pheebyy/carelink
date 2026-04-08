@@ -243,4 +243,36 @@ class NotificationService {
       }
     }, SetOptions(merge: true));
   }
+
+  /// Save a job notification to Firestore
+  Future<String> createJobNotification({
+    required String userId,
+    required String type, // 'job_hired', 'job_accepted', 'job_completed', 'review_submitted'
+    required String title,
+    required String message,
+    String? jobId,
+    String? relatedUserId,
+  }) async {
+    try {
+      final ref = await FirebaseFirestore.instance.collection('notifications').add({
+        'userId': userId,
+        'type': type,
+        'title': title,
+        'message': message,
+        'jobId': jobId,
+        'relatedUserId': relatedUserId,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Also show local notification
+      await showLocalNotification(title, message);
+
+      print('✅ Notification created: $type for user $userId');
+      return ref.id;
+    } catch (e) {
+      print('🔥 Error creating notification: $e');
+      rethrow;
+    }
+  }
 }

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../models/payment_model.dart';
 
 /// Service for managing payments and wallet operations in Firestore
@@ -205,4 +206,114 @@ class PaymentFirestoreService {
         .snapshots()
         .map((doc) => doc.exists ? CaregiverWallet.fromMap(doc.data()!) : null);
   }
+
+  // ==========================================
+  // 💰 WITHDRAWAL MANAGEMENT
+  // ==========================================
+
+  /// Process a withdrawal request (calls Cloud Function)
+  Future<Map<String, dynamic>?> requestWithdrawal({
+    required String caregiverId,
+    required double amount,
+    required String bank,
+    required String accountName,
+    String? accountNumber,
+    String? phoneNumber,
+  }) async {
+    try {
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('processWithdrawal');
+      final result = await callable.call(<String, dynamic>{
+        'caregiverId': caregiverId,
+        'amount': amount,
+        'bank': bank,
+        'accountName': accountName,
+        'accountNumber': accountNumber,
+        'phoneNumber': phoneNumber,
+      });
+      final data = result.data as Map<String, dynamic>?;
+      print(' Withdrawal processed: $data');
+      return data;
+    } catch (e) {
+      print(' Withdrawal error: $e');
+      return null;
+    }
+  }
+
+  /// Get withdrawal history
+  Future<List<Map<String, dynamic>>> getWithdrawalHistory(String caregiverId) async {
+    try {
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('getWithdrawalHistory');
+      final result = await callable.call(<String, dynamic>{
+        'caregiverId': caregiverId,
+        'limit': 50,
+      });
+      final data = result.data as Map<String, dynamic>?;
+      final withdrawals = List<Map<String, dynamic>>.from(data?['withdrawals'] ?? []);
+      return withdrawals;
+    } catch (e) {
+      print(' Error fetching withdrawal history: $e');
+      return [];
+    }
+  }
+
+  /// Stream withdrawal history
+  Stream<List<Map<String, dynamic>>> streamWithdrawalHistory(String caregiverId) {
+    return _db
+        .collection('withdrawals')
+        .where('caregiverId', isEqualTo: caregiverId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
+  // ==========================================
+  // 📋 AUDIT LOGGING
+  // ==========================================
+
+  /// Log audit event for transaction changes
+  Future<void> logAuditEvent({
+    required String userId,
+    required String eventType,
+    required String resource,
+    required String resourceId,
+    required String action,
+    Map<String, dynamic>? changes,
+    String? details,
+  }) async {
+    try {
+      await _db.collection('audit_logs').add({
+        'userId': userId,
+        'eventType': eventType, // 'transaction', 'withdrawal', 'refund'
+        'resource': resource, // 'transaction', 'withdrawal', 'wallet'
+        'resourceId': resourceId,
+        'action': action, // 'created', 'updated', 'completed', 'refunded'
+        'changes': changes,
+        'details': details,
+        'timestamp': Timestamp.now(),
+        'createdAt': DateTime.now(),
+      });
+      print('✅ Audit logged: $eventType - $action on $resource');
+    } catch (e) {
+      print('⚠️  Error logging audit event: $e');
+      // Don't rethrow - audit failures shouldn't block operations
+    }
+  }
+
+  /// Get audit logs for a transaction
+  Future<List<Map<String, dynamic>>> getTransactionAuditLog(String transactionId) async {
+    try {
+      final snapshot = await _db
+          .collection('audit_logs')
+          .where('resourceId', isEqualTo: transactionId)
+          .orderBy('timestamp', descending: true)
+          .get();
+      return snapshot.docs.map((doc) => doc.data()).toList();
+    } catch (e) {
+      print('Error fetching audit log: $e');
+      return [];
+    }
+  }
 }
+

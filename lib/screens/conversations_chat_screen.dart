@@ -254,7 +254,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          snap.error.toString(),
+                          'Please check your connection and try again.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 12,
@@ -510,7 +510,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
 
       await launchUrl(uri);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Call failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to start the call right now. Please try again.')),
+      );
     }
   }
 
@@ -539,7 +541,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen> {
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Video call failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to start video call right now. Please try again.')),
+      );
     }
   }
 

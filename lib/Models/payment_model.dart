@@ -8,10 +8,13 @@ class PaymentTransaction {
   final double amount; // Amount in KES
   final double caregiverEarnings;
   final double platformFee;
-  final String status; // 'pending', 'completed', 'failed'
+  final String status; // 'pending', 'completed', 'failed', 'refunded'
   final String reference;
   final DateTime createdAt;
   final DateTime? completedAt;
+  final DateTime? refundedAt;
+  final String? refundReference;
+  final String? refundReason;
   final Map<String, dynamic>? metadata;
 
   PaymentTransaction({
@@ -25,6 +28,9 @@ class PaymentTransaction {
     required this.reference,
     required this.createdAt,
     this.completedAt,
+    this.refundedAt,
+    this.refundReference,
+    this.refundReason,
     this.metadata,
   });
 
@@ -39,6 +45,9 @@ class PaymentTransaction {
     'reference': reference,
     'createdAt': Timestamp.fromDate(createdAt),
     'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+    'refundedAt': refundedAt != null ? Timestamp.fromDate(refundedAt!) : null,
+    'refundReference': refundReference,
+    'refundReason': refundReason,
     'metadata': metadata ?? {},
   };
 
@@ -55,6 +64,9 @@ class PaymentTransaction {
         reference: map['reference'] ?? '',
         createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
         completedAt: (map['completedAt'] as Timestamp?)?.toDate(),
+        refundedAt: (map['refundedAt'] as Timestamp?)?.toDate(),
+        refundReference: map['refundReference'],
+        refundReason: map['refundReason'],
         metadata: map['metadata'],
       );
 }

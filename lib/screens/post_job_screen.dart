@@ -80,8 +80,8 @@ class _PostJobScreenState extends State<PostJobScreen> {
           Navigator.pop(context);
         }
       }
-    } on FirebaseException catch (e) {
-      setState(() => _errorMessage = 'Error: ${e.message}');
+    } on FirebaseException {
+      setState(() => _errorMessage = 'Unable to post job right now. Please check your details and try again.');
     } catch (e) {
       setState(() => _errorMessage = 'An unexpected error occurred');
     } finally {
@@ -269,7 +269,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
                 TextFormField(
                   controller: _locationController,
                   decoration: InputDecoration(
-                    hintText: 'e.g., New York, NY',
+                    hintText: 'e.g., Nairobi, kitale, Eldoret',
                     hintStyle: TextStyle(color: Colors.grey.shade500),
                     prefixIcon: Icon(Icons.location_on_outlined, color: Colors.grey.shade600),
                     border: OutlineInputBorder(

@@ -135,7 +135,7 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          snap.error.toString(),
+                          'Please check your connection and try again.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 12,

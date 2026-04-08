@@ -11,6 +11,15 @@ import 'screens/forgot_password_screen.dart';
 import 'screens/role_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/vitals_ble_screen.dart';
+import 'screens/caregiver_active_jobs_screen.dart';
+import 'screens/client_job_management_screen.dart';
+import 'screens/job_completion_screen.dart';
+import 'screens/job_applicants_screen.dart';
+import 'screens/review_submission_screen.dart';
+import 'screens/caregiver_analytics_dashboard.dart';
+import 'screens/caregiver_availability_screen.dart';
+import 'screens/job_search_filter_screen.dart';
+import 'Models/Job_model.dart';
 
 
 // ─────────────── Providers ───────────────
@@ -57,9 +66,15 @@ class CarelinkApp extends ConsumerWidget {
         '/caregiver': (context) => const RoleShell(role: 'caregiver'),
         '/client': (context) => const RoleShell(role: 'client'),
         '/vitals-ble': (context) => const VitalsBleScreen(),
+        '/caregiver-jobs': (context) => const CaregiveActiveJobsScreen(),
+        '/client-jobs': (context) => const ClientJobManagementScreen(),
+        '/caregiver-analytics': (context) => const CaregiverAnalyticsDashboard(),
+        '/caregiver-availability': (context) => const CaregiverAvailabilityScreen(),
+        '/job-search': (context) => const JobSearchFilterScreen(),
       },
-      // handle dynamic routes (e.g., /conversation)
+      // handle dynamic routes (e.g., /conversation, /job-completion, /review)
       onGenerateRoute: (settings) {
+        // ===== CONVERSATION ROUTE =====
         if (settings.name == '/conversation') {
           final args = settings.arguments as Map<String, dynamic>?;
           final id = args?['conversationId'] as String?;
@@ -68,6 +83,34 @@ class CarelinkApp extends ConsumerWidget {
             builder: (_) => ConversationChatScreen(conversationId: id),
           );
         }
+
+        // ===== JOB COMPLETION ROUTE =====
+        if (settings.name == '/job-completion') {
+          final job = settings.arguments as JobModel?;
+          if (job == null) return null;
+          return MaterialPageRoute(
+            builder: (_) => JobCompletionScreen(job: job),
+          );
+        }
+
+        // ===== JOB APPLICANTS ROUTE =====
+        if (settings.name == '/job-applicants') {
+          final job = settings.arguments as JobModel?;
+          if (job == null) return null;
+          return MaterialPageRoute(
+            builder: (_) => JobApplicantsScreen(job: job),
+          );
+        }
+
+        // ===== REVIEW SUBMISSION ROUTE =====
+        if (settings.name == '/review') {
+          final job = settings.arguments as JobModel?;
+          if (job == null) return null;
+          return MaterialPageRoute(
+            builder: (_) => ReviewSubmissionScreen(job: job),
+          );
+        }
+
         return null;
       },
     );

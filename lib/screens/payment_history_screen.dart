@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/payment_model.dart';
 import '../services/payment_firestore_service.dart';
 import 'payment_receipt_screen.dart';
+import 'refund_request_screen.dart';
 
 /// Screen showing payment history for the current user (client).
 class PaymentHistoryScreen extends StatefulWidget {
@@ -39,7 +40,9 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
           }
 
           if (snap.hasError) {
-            return Center(child: Text('Error: ${snap.error}'));
+            return const Center(
+              child: Text('Unable to load payment history right now. Please try again.'),
+            );
           }
 
           final transactions = snap.data ?? [];
@@ -79,55 +82,148 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
-      child: ListTile(
-        leading: Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: statusColor.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(statusIcon, color: statusColor, size: 28),
-        ),
-        title: Text(
-          'KES ${tx.amount.toStringAsFixed(2)}',
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        subtitle: Text(
-          'Ref: ${tx.reference.substring(0, 20)}...',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Column(
+        children: [
+          ListTile(
+            leading: Container(
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
                 color: statusColor.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Text(
-                tx.status.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: statusColor,
+              child: Icon(statusIcon, color: statusColor, size: 28),
+            ),
+            title: Text(
+              'KES ${tx.amount.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            subtitle: Text(
+              'Ref: ${tx.reference.substring(0, 20)}...',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    tx.status.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year}',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                ),
+              ],
+            ),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => PaymentReceiptScreen(transaction: tx),
+              ),
+            ),
+          ),
+          // Refund button for completed payments
+          if (tx.status == 'completed')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: SizedBox(
+                width: double.infinity,
+                height: 36,
+                child: ElevatedButton(
+                  onPressed: () => _showRefundDialog(context, tx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                  ),
+                  child: const Text(
+                    'Request Refund',
+                    style: TextStyle(fontSize: 13),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year}',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+          // Status messages for other states
+          if (tx.status == 'refunded')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.blue.shade600, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Refund processed. Will be credited in 5-7 business days.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
+        ],
+      ),
+    );
+  }
+
+  void _showRefundDialog(BuildContext context, PaymentTransaction tx) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Request Refund?'),
+        content: Text(
+          'Request a refund for KES ${tx.amount.toStringAsFixed(2)}? You\'ll need to provide a reason.',
         ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => PaymentReceiptScreen(transaction: tx),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
-        ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => RefundRequestScreen(transaction: tx),
+                ),
+              ).then((result) {
+                if (result == true && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Refund request submitted successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              });
+            },
+            child: const Text('Continue'),
+          ),
+        ],
       ),
     );
   }

@@ -426,7 +426,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
       scrolledUnderElevation: 0,
       leading: IconButton(
         icon: Icon(Icons.menu, color: Colors.grey.shade800),
-        onPressed: () => _showSnackBar('Menu feature coming soon'),
+        onPressed: () => _showSnackBar('More features coming soon'),
       ),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

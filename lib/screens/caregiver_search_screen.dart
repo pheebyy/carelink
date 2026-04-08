@@ -353,7 +353,7 @@ class _CaregiverSearchScreenState extends State<CaregiverSearchScreen> {
         if (snap.hasError) {
           return Center(
             child: Text(
-              'Error: ${snap.error}',
+              'Unable to load caregivers right now. Please try again.',
               style: TextStyle(color: Colors.red.shade700),
             ),
           );

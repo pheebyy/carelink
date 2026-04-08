@@ -23,6 +23,15 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
     'as needed',
   };
 
+  static const List<MapEntry<String, String>> _frequencyOptions = [
+    MapEntry('', 'None'),
+    MapEntry('daily', 'Daily'),
+    MapEntry('weekly', 'Weekly'),
+    MapEntry('weekdays', 'Weekdays'),
+    MapEntry('monthly', 'Monthly'),
+    MapEntry('as needed', 'As needed'),
+  ];
+
   void _showMessage(String text, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -30,6 +39,38 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
         backgroundColor: isError ? Colors.red.shade600 : null,
       ),
     );
+  }
+
+  String _friendlyErrorMessage(
+    Object error, {
+    String fallback = 'Something went wrong. Please try again.',
+  }) {
+    if (error is FirebaseException) {
+      switch (error.code) {
+        case 'permission-denied':
+          return 'You do not have permission to perform this action.';
+        case 'unavailable':
+          return 'Service is temporarily unavailable. Please try again in a moment.';
+        case 'network-request-failed':
+          return 'No internet connection. Check your network and try again.';
+        case 'deadline-exceeded':
+          return 'The request took too long. Please try again.';
+        case 'not-found':
+          return 'The item could not be found. It may have been removed.';
+        default:
+          return fallback;
+      }
+    }
+
+    final msg = error.toString().toLowerCase();
+    if (msg.contains('permission-denied')) {
+      return 'You do not have permission to perform this action.';
+    }
+    if (msg.contains('network') || msg.contains('socket') || msg.contains('timeout')) {
+      return 'No internet connection. Check your network and try again.';
+    }
+
+    return fallback;
   }
 
   String? _validateCarePlanInputs({
@@ -103,7 +144,30 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
 
           if (snapshot.hasError) {
             return Center(
-              child: Text('Error: ${snapshot.error}'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red.shade400, size: 42),
+                    const SizedBox(height: 12),
+                    Text(
+                      _friendlyErrorMessage(
+                        snapshot.error ?? Exception('Unknown error'),
+                        fallback: 'Unable to load your care plan right now. Please try again.',
+                      ),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: () => setState(() {}),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Try again'),
+                    ),
+                  ],
+                ),
+              ),
             );
           }
 
@@ -196,8 +260,20 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
               Checkbox(
                 value: isCompleted,
                 onChanged: (value) async {
-                  await _fs.toggleCarePlanCompletion(_uid!, planId, value ?? false);
-                  await NotificationService.instance.syncMedicationRemindersForUser(_uid);
+                  try {
+                    await _fs.toggleCarePlanCompletion(_uid!, planId, value ?? false);
+                    await NotificationService.instance.syncMedicationRemindersForUser(_uid);
+                  } catch (e) {
+                    if (mounted) {
+                      _showMessage(
+                        _friendlyErrorMessage(
+                          e,
+                          fallback: 'Unable to update this care plan item right now. Please try again.',
+                        ),
+                        isError: true,
+                      );
+                    }
+                  }
                 },
                 activeColor: Colors.green,
               ),
@@ -279,8 +355,8 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     final timeController = TextEditingController();
-    final frequencyController = TextEditingController();
     String selectedType = 'medication';
+    String selectedFrequency = '';
     bool isSaving = false;
 
     showDialog(
@@ -345,13 +421,23 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                 ),
                 const SizedBox(height: 16),
                 // Frequency
-                TextField(
-                  controller: frequencyController,
+                DropdownButtonFormField<String>(
+                  value: selectedFrequency,
                   decoration: const InputDecoration(
                     labelText: 'Frequency (optional)',
-                    hintText: 'Daily, Weekly, Weekdays, Monthly, As needed',
                     border: OutlineInputBorder(),
                   ),
+                  items: _frequencyOptions
+                      .map(
+                        (option) => DropdownMenuItem<String>(
+                          value: option.key,
+                          child: Text(option.value),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    setDialogState(() => selectedFrequency = value ?? '');
+                  },
                 ),
               ],
             ),
@@ -370,7 +456,7 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                   title: titleController.text,
                   description: descriptionController.text,
                   time: timeController.text,
-                  frequency: frequencyController.text,
+                  frequency: selectedFrequency,
                 );
 
                 if (validationError != null) {
@@ -386,9 +472,9 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                     title: titleController.text.trim(),
                     description: descriptionController.text.trim(),
                     time: timeController.text.trim().isEmpty ? null : timeController.text.trim(),
-                    frequency: frequencyController.text.trim().isEmpty
+                    frequency: selectedFrequency.trim().isEmpty
                         ? null
-                        : frequencyController.text.trim(),
+                      : selectedFrequency,
                   );
 
                   await NotificationService.instance.syncMedicationRemindersForUser(_uid);
@@ -399,7 +485,13 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                   }
                 } catch (e) {
                   if (mounted) {
-                    _showMessage('Error: $e', isError: true);
+                    _showMessage(
+                      _friendlyErrorMessage(
+                        e,
+                        fallback: 'Unable to add care plan item. Please try again.',
+                      ),
+                      isError: true,
+                    );
                   }
                 } finally {
                   if (mounted) {
@@ -426,8 +518,9 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
     final titleController = TextEditingController(text: plan['title']);
     final descriptionController = TextEditingController(text: plan['description']);
     final timeController = TextEditingController(text: plan['time'] ?? '');
-    final frequencyController = TextEditingController(text: plan['frequency'] ?? '');
     String selectedType = plan['type'] ?? 'medication';
+    final rawFrequency = (plan['frequency'] ?? '').toString().toLowerCase().trim();
+    String selectedFrequency = _allowedFrequencies.contains(rawFrequency) ? rawFrequency : '';
     bool isSaving = false;
 
     showDialog(
@@ -492,13 +585,23 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                 ),
                 const SizedBox(height: 16),
                 // Frequency
-                TextField(
-                  controller: frequencyController,
+                DropdownButtonFormField<String>(
+                  value: selectedFrequency,
                   decoration: const InputDecoration(
                     labelText: 'Frequency (optional)',
-                    hintText: 'Daily, Weekly, Weekdays, Monthly, As needed',
                     border: OutlineInputBorder(),
                   ),
+                  items: _frequencyOptions
+                      .map(
+                        (option) => DropdownMenuItem<String>(
+                          value: option.key,
+                          child: Text(option.value),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    setDialogState(() => selectedFrequency = value ?? '');
+                  },
                 ),
               ],
             ),
@@ -517,7 +620,7 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                   title: titleController.text,
                   description: descriptionController.text,
                   time: timeController.text,
-                  frequency: frequencyController.text,
+                  frequency: selectedFrequency,
                 );
 
                 if (validationError != null) {
@@ -532,9 +635,9 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                     'title': titleController.text.trim(),
                     'description': descriptionController.text.trim(),
                     'time': timeController.text.trim().isEmpty ? null : timeController.text.trim(),
-                    'frequency': frequencyController.text.trim().isEmpty
+                    'frequency': selectedFrequency.trim().isEmpty
                         ? null
-                        : frequencyController.text.trim(),
+                      : selectedFrequency,
                   });
 
                   await NotificationService.instance.syncMedicationRemindersForUser(_uid);
@@ -545,7 +648,13 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                   }
                 } catch (e) {
                   if (mounted) {
-                    _showMessage('Error: $e', isError: true);
+                    _showMessage(
+                      _friendlyErrorMessage(
+                        e,
+                        fallback: 'Unable to update care plan item. Please try again.',
+                      ),
+                      isError: true,
+                    );
                   }
                 } finally {
                   if (mounted) {
@@ -596,7 +705,13 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                       } catch (e) {
                         if (mounted) {
                           Navigator.pop(context);
-                          _showMessage('Error: $e', isError: true);
+                          _showMessage(
+                            _friendlyErrorMessage(
+                              e,
+                              fallback: 'Unable to delete care plan item. Please try again.',
+                            ),
+                            isError: true,
+                          );
                         }
                       } finally {
                         if (mounted) {

@@ -307,7 +307,7 @@ class _CardPaymentScreenState extends State<CardPaymentScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: const Text('Unable to start payment right now. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -367,7 +367,7 @@ class _CardPaymentScreenState extends State<CardPaymentScreen> {
         Navigator.pop(context); // Close loading
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Verification failed: $e'),
+            content: const Text('Payment verification failed. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );

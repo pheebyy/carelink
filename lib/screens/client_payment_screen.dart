@@ -113,26 +113,31 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
       // Initialize transaction on backend to get access code
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('initializeTransaction');
-      final initResult = await callable.call(<String, dynamic>{
-        'email': paymentConfig['email'],
-        'amount': paymentConfig['amount'],
-        'reference': paymentConfig['reference'],
-        'currency': paymentConfig['currency'],
-        'metadata': paymentConfig['metadata'],
-      });
+      
+      try {
+        final initResult = await callable.call(<String, dynamic>{
+          'email': paymentConfig['email'],
+          'amount': paymentConfig['amount'],
+          'reference': paymentConfig['reference'],
+          'currency': paymentConfig['currency'],
+          'metadata': paymentConfig['metadata'],
+        });
 
-      final initData = initResult.data as Map<String, dynamic>?;
-      final accessCode =
-          initData?['accessCode'] ??
-          initData?['access_code'] ??
-          initData?['data']?['access_code'];
+        final initData = initResult.data as Map<String, dynamic>?;
+        final accessCode =
+            initData?['accessCode'] ??
+            initData?['access_code'] ??
+            initData?['data']?['access_code'];
 
-      if (initData == null || accessCode == null) {
-        throw Exception('Could not initialize payment with Paystack');
+        if (initData == null || accessCode == null) {
+          throw Exception('Could not initialize payment with Paystack. Response: $initData');
+        }
+
+        // Add access code to config
+        paymentConfig['accessCode'] = accessCode;
+      } on FirebaseFunctionsException catch (e) {
+        throw Exception('Payment service error: ${e.code} - ${e.message}');
       }
-
-      // Add access code to config
-      paymentConfig['accessCode'] = accessCode;
 
       if (!mounted) return;
 
@@ -164,9 +169,7 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
         return;
       }
 
-      // After successful Paystack payment & verification, mark transaction as completed
-      await _paymentService.completeTransaction(reference);
-
+      // Payment verified by Cloud Function - transaction is complete
       if (!mounted) return;
 
       _showSuccess(
@@ -176,7 +179,8 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
 
       Navigator.pop(context, true);
     } catch (e) {
-      _showError('Payment failed: ${e.toString()}');
+      print('Payment error: $e');
+      _showError('Payment error: ${e.toString()}');
     } finally {
       if (mounted) {
         setState(() => _isProcessing = false);
@@ -550,7 +554,7 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
     } catch (e) {
       await _paystackService.handlePaymentFailure(reference, e.toString());
       _showError(
-        'Paystack error: $e. Tap to retry.',
+        'Payment service is temporarily unavailable. Tap to retry.',
         showRetry: true,
         reference: reference,
       );

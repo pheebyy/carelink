@@ -55,7 +55,7 @@ class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
         onError: (error) {
           // Payment failed
           if (mounted) {
-            _showErrorAndReturn('Payment error: $error');
+            _showErrorAndReturn('Payment could not be processed. Please try again.');
           }
         },
         onCancel: (response) {
@@ -68,7 +68,7 @@ class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
     } catch (e) {
       print(' Checkout error: $e');
       if (mounted) {
-        _showErrorAndReturn('Payment error: ${e.toString()}');
+        _showErrorAndReturn('Payment could not be processed. Please try again.');
       }
     } finally {
       if (mounted) {
@@ -89,7 +89,7 @@ class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
     if (verified) {
       Navigator.of(context).pop(true);
     } else {
-      _showErrorAndReturn('Payment verification failed. Please contact support.');
+      _showErrorAndReturn('Payment verification failed. Please try again. If you were charged, contact support.');
     }
   }
 

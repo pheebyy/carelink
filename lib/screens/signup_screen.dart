@@ -189,7 +189,7 @@ class _SignupScreenState extends State<SignupScreen> {
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _getFirebaseErrorMessage(e));
     } catch (e) {
-      setState(() => _errorMessage = 'An unexpected error occurred: $e');
+      setState(() => _errorMessage = 'Something went wrong while creating your account. Please try again.');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -262,7 +262,7 @@ class _SignupScreenState extends State<SignupScreen> {
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _getFirebaseErrorMessage(e));
     } catch (e) {
-      setState(() => _errorMessage = 'An error occurred: $e');
+      setState(() => _errorMessage = 'Something went wrong while signing up with Google. Please try again.');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);

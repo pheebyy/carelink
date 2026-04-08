@@ -141,7 +141,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: ${e.toString()}')),
+                    const SnackBar(content: Text('Unable to submit bid right now. Please try again.')),
                   );
                 }
               }
@@ -446,7 +446,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       } catch (e) {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Error: $e')),
+                            const SnackBar(content: Text('Unable to reject bid right now. Please try again.')),
                           );
                         }
                       }
@@ -466,7 +466,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       } catch (e) {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Error: $e')),
+                            const SnackBar(content: Text('Unable to approve bid right now. Please try again.')),
                           );
                         }
                       }
@@ -609,7 +609,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
+                    const SnackBar(content: Text('Unable to send message right now. Please try again.')),
                   );
                 }
               }

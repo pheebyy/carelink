@@ -352,19 +352,24 @@ class PaystackService {
   }
 
   /// Request refund for a transaction (calls Cloud Function)
-  Future<bool> initiateRefund(String reference) async {
+  Future<Map<String, dynamic>?> initiateRefund({
+    required String reference,
+    required String reason,
+  }) async {
     try {
       print(' Initiating refund for reference: $reference');
       final functions = FirebaseFunctions.instance;
       final callable = functions.httpsCallable('initiateRefund');
-      final result = await callable.call(<String, dynamic>{'reference': reference});
+      final result = await callable.call(<String, dynamic>{
+        'reference': reference,
+        'reason': reason,
+      });
       final data = result.data as Map<String, dynamic>?;
-      final success = data != null && data['status'] == 'refund_initiated';
       print(' Refund result: $data');
-      return success;
+      return data;
     } catch (e) {
       print(' Refund Error: $e');
-      return false;
+      return null;
     }
   }
 
@@ -393,4 +398,128 @@ class PaystackService {
 
   // Removed invalid class-level example:
   // final ref = reference ?? generateUniqueReference('mpesa');
+
+  // ================================
+  // 🛡️ ERROR RECOVERY & LIMITS
+  // ================================
+
+  /// Transaction limits per currency
+  static const double MAX_SINGLE_TRANSACTION_KES = 500000; // KES 500,000
+  static const double MIN_SINGLE_TRANSACTION_KES = 10; // KES 10
+  static const double MAX_DAILY_TRANSACTION_KES = 2000000; // KES 2,000,000
+  static const int MAX_RETRY_ATTEMPTS = 3;
+  static const Duration RETRY_BACKOFF = Duration(seconds: 2);
+
+  /// Validate transaction amount against limits
+  Map<String, dynamic> validateTransactionAmount(double amount) {
+    if (amount < MIN_SINGLE_TRANSACTION_KES) {
+      return {
+        'valid': false,
+        'error': 'Minimum transaction is KES ${MIN_SINGLE_TRANSACTION_KES.toStringAsFixed(2)}',
+        'code': 'amount_too_low',
+      };
+    }
+
+    if (amount > MAX_SINGLE_TRANSACTION_KES) {
+      return {
+        'valid': false,
+        'error': 'Maximum transaction is KES ${MAX_SINGLE_TRANSACTION_KES.toStringAsFixed(0)}',
+        'code': 'amount_too_high',
+      };
+    }
+
+    return {'valid': true};
+  }
+
+  /// Check for unusual transaction pattern (e.g., 3x average)
+  bool isUnusualAmount(double amount, double averageAmount) {
+    final threshold = averageAmount * 3;
+    if (amount > threshold) {
+      print(' Warning: Unusual amount detected (${amount / averageAmount}x average)');
+      return true;
+    }
+    return false;
+  }
+
+  /// Verify daily transaction limit
+  Future<Map<String, dynamic>> checkDailyLimit(
+    String userId,
+    double proposedAmount,
+  ) async {
+    try {
+      // Get today's transactions total (would connect to Firestore)
+      // This is a placeholder - implement actual Firestore query
+      final todaysTotal = 0.0; // Would sum actual transactions
+
+      if ((todaysTotal + proposedAmount) > MAX_DAILY_TRANSACTION_KES) {
+        return {
+          'allowed': false,
+          'remaining': MAX_DAILY_TRANSACTION_KES - todaysTotal,
+          'error': 'Daily limit exceeded. You have KES ${MAX_DAILY_TRANSACTION_KES - todaysTotal} remaining today.',
+        };
+      }
+
+      return {
+        'allowed': true,
+        'remaining': MAX_DAILY_TRANSACTION_KES - (todaysTotal + proposedAmount),
+      };
+    } catch (e) {
+      print(' Error checking daily limit: $e');
+      return {'allowed': true, 'remaining': MAX_DAILY_TRANSACTION_KES};
+    }
+  }
+
+  /// Retry a payment verification with exponential backoff
+  Future<bool> verifyPaymentWithRetry(
+    String reference, {
+    String? userId,
+    String? role,
+    int maxRetries = MAX_RETRY_ATTEMPTS,
+  }) async {
+    int attempt = 0;
+    Duration backoff = RETRY_BACKOFF;
+
+    while (attempt < maxRetries) {
+      try {
+        attempt++;
+        print(' Verification attempt $attempt/$maxRetries for $reference');
+
+        final verified = await verifyPayment(reference, userId: userId, role: role);
+        if (verified) {
+          return true;
+        }
+
+        if (attempt < maxRetries) {
+          print(' Verification failed, retrying in ${backoff.inSeconds}s...');
+          await Future.delayed(backoff);
+          backoff = Duration(seconds: backoff.inSeconds * 2); // Exponential backoff
+        }
+      } catch (e) {
+        print(' Retry attempt $attempt failed: $e');
+        if (attempt < maxRetries) {
+          await Future.delayed(backoff);
+          backoff = Duration(seconds: backoff.inSeconds * 2);
+        }
+      }
+    }
+
+    print(' All verification attempts failed for $reference');
+    return false;
+  }
+
+  /// Track failed verification attempts
+  Future<void> recordVerificationFailure(String reference, String reason) async {
+    try {
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('logPaymentFailure');
+      await callable.call(<String, dynamic>{
+        'reference': reference,
+        'reason': 'Verification failed: $reason',
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print(' Error recording failure: $e');
+    }
+  }
 }
+

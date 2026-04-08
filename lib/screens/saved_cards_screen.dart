@@ -37,7 +37,7 @@ class _SavedCardsScreenState extends State<SavedCardsScreen> {
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading cards: $e')),
+          const SnackBar(content: Text('Unable to load saved cards right now. Please try again.')),
         );
       }
     }
@@ -316,7 +316,7 @@ class _SavedCardsScreenState extends State<SavedCardsScreen> {
       Navigator.pop(context); // Close loading
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error deleting card: $e'),
+          content: const Text('Unable to delete card right now. Please try again.'),
           backgroundColor: Colors.red,
         ),
       );
