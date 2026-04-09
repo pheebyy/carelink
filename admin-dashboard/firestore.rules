@@ -1,0 +1,161 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ======================== HELPER FUNCTIONS ========================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    function hasAdminRole(role) {
+      return isAuthenticated() && request.auth.token.admin_role == role;
+    }
+
+    function hasPermission(permission) {
+      return isAdmin() || get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.permissions[permission] == true;
+    }
+
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isJobOwner(jobId) {
+      return isAuthenticated() && get(/databases/$(database)/documents/jobs/$(jobId)).data.clientId == request.auth.uid;
+    }
+
+    // ======================== ADMIN COLLECTION (NEW) ========================
+    match /admins/{adminId} {
+      // Only admins can read other admins
+      allow read: if isAdmin();
+      
+      // Super admin only can create/update/delete admins
+      allow create, update, delete: if hasAdminRole('superadmin');
+    }
+
+    // ======================== AUDIT LOGS COLLECTION (NEW) ========================
+    match /auditLogs/{logId} {
+      // All admins can read audit logs
+      allow read: if hasPermission('canViewAuditLog');
+      
+      // Admin operations (via Cloud Function only - no direct writes)
+      allow create: if false;
+    }
+
+    // ======================== USERS COLLECTION ========================
+    match /users/{uid} {
+      allow read: if isUser(uid) || isAdmin();
+      
+      allow create: if isUser(uid);
+      
+      allow update: if isUser(uid) && 
+        !request.resource.data.keys().hasAny(['admin']) &&
+        (!request.resource.data.keys().hasAny(['role']) ||
+         request.resource.data.role in ['caregiver', 'client', null]) ||
+        (isAdmin() && hasPermission('canManageUsers'));
+      
+      allow delete: if isAdmin() && hasPermission('canManageUsers');
+      
+      // Verification sub-collection
+      match /verification/{verificationId} {
+        allow read, create, update: if isUser(uid) || (isAdmin() && hasPermission('canVerifyCaregiver'));
+        allow delete: if isAdmin() && hasPermission('canVerifyCaregiver');
+      }
+      
+      // Wallet sub-collection
+      match /wallet/{walletId} {
+        allow read, create, update: if isUser(uid) || isAdmin();
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ======================== JOBS COLLECTION ========================
+    match /jobs/{jobId} {
+      allow read: if true;
+      
+      allow create: if isAuthenticated() && request.resource.data.clientId == request.auth.uid;
+      
+      // Job owner can modify/delete their own job. Admin can moderate any job.
+      allow update, delete: if (isJobOwner(jobId) && !request.resource.data.keys().hasAny(['status', 'flagged'])) ||
+                              (isAdmin() && hasPermission('canModerateJobs'));
+      
+      // Bids sub-collection
+      match /bids/{bidId} {
+        allow read: if isAuthenticated() && (isJobOwner(jobId) || 
+                    get(/databases/$(database)/documents/jobs/$(jobId)).data.caregiverId == request.auth.uid || 
+                    isAdmin());
+        
+        allow create: if isAuthenticated() && request.resource.data.caregiverId == request.auth.uid;
+        
+        allow update: if isAuthenticated() && (request.resource.data.caregiverId == request.auth.uid || 
+                       isAdmin() && hasPermission('canModerateJobs'));
+        
+        allow delete: if isAdmin() && hasPermission('canModerateJobs');
+      }
+      
+      // Applications sub-collection
+      match /applications/{appId} {
+        allow read, create, update, delete: if isAuthenticated() && 
+                    (isJobOwner(jobId) || 
+                     request.resource.data.caregiverId == request.auth.uid || 
+                     isAdmin());
+      }
+    }
+
+    // ======================== PAYMENTS COLLECTION (NEW) ========================
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isAdmin());
+      
+      allow create: if isAuthenticated();
+      
+      // Admins with finance permission can update payment status
+      allow update: if isAdmin() && hasPermission('canApprovePayouts');
+      
+      allow delete: if isAdmin() && hasPermission('canApprovePayouts');
+    }
+
+    // ======================== DISPUTES COLLECTION (NEW) ========================
+    match /disputes/{caseId} {
+      allow read: if isAuthenticated() && (request.resource.data.raisedBy == request.auth.uid ||
+                   request.resource.data.raisedAgainst == request.auth.uid ||
+                   isAdmin());
+      
+      allow create: if isAuthenticated() && request.resource.data.raisedBy == request.auth.uid;
+      
+      // Admins with dispute permission can update/resolve
+      allow update: if isAdmin() && hasPermission('canManageDisputes');
+      
+      allow delete: if isAdmin() && hasPermission('canManageDisputes');
+    }
+
+    // ======================== MESSAGES COLLECTION ========================
+    match /messages/{messageId} {
+      allow read, create, update: if isAuthenticated() && (request.resource.data.senderId == request.auth.uid ||
+                                   request.resource.data.recipientId == request.auth.uid ||
+                                   isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ======================== REVIEWS COLLECTION ========================
+    match /reviews/{reviewId} {
+      allow read: if true;
+      
+      allow create: if isAuthenticated() && request.resource.data.reviewerId == request.auth.uid;
+      
+      // Only the reviewer or admin can update their own review
+      allow update: if (isAuthenticated() && request.resource.data.reviewerId == request.auth.uid) ||
+                    isAdmin();
+      
+      allow delete: if isAdmin();
+    }
+
+    // ======================== NOTIFICATIONS COLLECTION ========================
+    match /notifications/{notificationId} {
+      allow read, create, update: if isAuthenticated() && request.resource.data.userId == request.auth.uid || isAdmin();
+      allow delete: if isAdmin();
+    }
+  }
+}
