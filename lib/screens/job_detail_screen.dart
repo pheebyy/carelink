@@ -62,7 +62,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 controller: _bidAmountCtrl,
                 decoration: const InputDecoration(
                   labelText: 'Bid Amount (KES)',
-                  hintText: 'Enter your bid amount',
+                  hintText: 'e.g., KES 5000 or KES 10000',
                   prefixText: 'KES ',
                   border: OutlineInputBorder(),
                 ),

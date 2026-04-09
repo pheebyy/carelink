@@ -494,7 +494,7 @@ class _AllJobsScreenState extends State<AllJobsScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          '\$$pay/hr',
+          '\ KES $pay/hr',
           style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,

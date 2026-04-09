@@ -63,6 +63,7 @@ dependencies:
 
   # BLE support for wearable integration
   flutter_blue_plus: ^1.16.5
+  google_maps_flutter: ^2.14.2
 
 dev_dependencies:
   flutter_test:

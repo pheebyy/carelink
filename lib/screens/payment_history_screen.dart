@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../models/payment_model.dart';
+import '../Models/payment_model.dart';
 import '../services/payment_firestore_service.dart';
 import 'payment_receipt_screen.dart';
 import 'refund_request_screen.dart';

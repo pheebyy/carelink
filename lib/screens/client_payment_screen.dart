@@ -344,7 +344,7 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\.]'))],
               decoration: InputDecoration(
                 prefixText: 'KES ',
-                hintText: '0.00',
+                hintText: 'e.g., KES 5000',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: Colors.grey.shade300),

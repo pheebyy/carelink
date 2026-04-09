@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/payment_model.dart';
+import '../Models/payment_model.dart';
 
 /// Detailed receipt screen for a single payment transaction.
 class PaymentReceiptScreen extends StatefulWidget {

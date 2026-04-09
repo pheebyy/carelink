@@ -19,7 +19,13 @@ import 'screens/review_submission_screen.dart';
 import 'screens/caregiver_analytics_dashboard.dart';
 import 'screens/caregiver_availability_screen.dart';
 import 'screens/job_search_filter_screen.dart';
+import 'screens/payment_caregiver_verification_screen.dart';
+import 'screens/caregiver_payment_history_screen.dart';
+import 'screens/client_payment_history_screen.dart';
+import 'screens/dispute_and_refund_screen.dart';
+import 'screens/admin_payment_dashboard_screen.dart';
 import 'Models/Job_model.dart';
+import 'Models/payment_model.dart';
 
 
 // ─────────────── Providers ───────────────
@@ -71,6 +77,9 @@ class CarelinkApp extends ConsumerWidget {
         '/caregiver-analytics': (context) => const CaregiverAnalyticsDashboard(),
         '/caregiver-availability': (context) => const CaregiverAvailabilityScreen(),
         '/job-search': (context) => const JobSearchFilterScreen(),
+        '/caregiver-payment-history': (context) => const CaregiverPaymentHistoryScreen(),
+        '/client-payment-history': (context) => const ClientPaymentHistoryScreen(),
+        '/admin-payment-dashboard': (context) => const AdminPaymentDashboardScreen(),
       },
       // handle dynamic routes (e.g., /conversation, /job-completion, /review)
       onGenerateRoute: (settings) {
@@ -108,6 +117,33 @@ class CarelinkApp extends ConsumerWidget {
           if (job == null) return null;
           return MaterialPageRoute(
             builder: (_) => ReviewSubmissionScreen(job: job),
+          );
+        }
+
+        // ===== PAYMENT CAREGIVER VERIFICATION ROUTE =====
+        if (settings.name == '/payment-verification') {
+          final args = settings.arguments as Map<String, dynamic>?;
+          final job = args?['job'] as JobModel?;
+          final caregiverId = args?['caregiverId'] as String?;
+          if (job == null || caregiverId == null) return null;
+          return MaterialPageRoute(
+            builder: (_) => PaymentCaregiverVerificationScreen(
+              job: job,
+              caregiverId: caregiverId,
+            ),
+          );
+        }
+
+        // ===== DISPUTE AND REFUND ROUTE =====
+        if (settings.name == '/dispute') {
+          final args = settings.arguments as Map<String, dynamic>?;
+          final transaction = args?['transaction'] as PaymentTransaction?;
+          final transactionId = args?['transactionId'] as String?;
+          return MaterialPageRoute(
+            builder: (_) => DisputeAndRefundScreen(
+              transaction: transaction,
+              transactionId: transactionId,
+            ),
           );
         }
 

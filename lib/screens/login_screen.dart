@@ -341,6 +341,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return _buildLoginForm();
+  }
+
+  Widget _buildLoginForm() {
     // ── Session check splash ──────────────────────────────────────────────────
     // Show a plain green splash while we silently verify the existing session.
     // This prevents the login form from flashing on screen before the

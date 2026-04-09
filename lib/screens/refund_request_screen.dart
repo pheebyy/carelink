@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/paystack_service.dart';
-import '../models/payment_model.dart';
+import '../Models/payment_model.dart';
 
 class RefundRequestScreen extends StatefulWidget {
   final PaymentTransaction transaction;

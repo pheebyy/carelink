@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import '../models/payment_model.dart';
+import '../Models/payment_model.dart';
 
 /// Service for managing payments and wallet operations in Firestore
 class PaymentFirestoreService {

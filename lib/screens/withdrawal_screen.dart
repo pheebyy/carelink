@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/payment_firestore_service.dart';
-import '../models/payment_model.dart';
+import '../Models/payment_model.dart';
 
 class WithdrawalScreen extends StatefulWidget {
   const WithdrawalScreen({super.key});
@@ -121,7 +121,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     prefixText: 'KES ',
-                    hintText: '0.00',
+                    hintText: 'e.g., KES 1000',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),

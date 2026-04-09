@@ -35,16 +35,26 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   bool _isRefreshing = false;
   bool _showAiAssistant = false;
   int _retryCounter = 0;
+  bool _isStreamReady = false; // Lazy-load stream after UI render
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
     _fs = FirestoreService();
-    _initializeAiService();
+    
+    // Initialize AI service in the background (non-blocking)
+    _initializeAiServiceDeferred();
+    
+    // Delay stream loading until after first frame renders
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() => _isStreamReady = true);
+      }
+    });
   }
 
-  void _initializeAiService() {
+  Future<void> _initializeAiServiceDeferred() async {
     try {
       final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
       if (apiKey.isEmpty) {
@@ -179,7 +189,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   // ==================== Build Methods ====================
   @override
   Widget build(BuildContext context) {
-    final stream = _fs.openJobsStream();
+    final stream = _isStreamReady ? _fs.openJobsStream() : null;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FB),
@@ -207,8 +217,12 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   }
 
   Widget _buildMainContent(
-    Stream<QuerySnapshot<Map<String, dynamic>>> stream,
+    Stream<QuerySnapshot<Map<String, dynamic>>>? stream,
   ) {
+    if (stream == null) {
+      return _buildSkeletonLoaderState();
+    }
+
     return RefreshIndicator(
       onRefresh: _refresh,
       color: Colors.green,
@@ -218,6 +232,34 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
         builder: (context, snapshot) {
           return _buildStreamContent(snapshot);
         },
+      ),
+    );
+  }
+
+  /// Skeleton loader UI while waiting for Firestore data
+  Widget _buildSkeletonLoaderState() {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Column(
+        children: List.generate(
+          3,
+          (index) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Container(
+              height: 200,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
