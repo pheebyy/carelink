@@ -21,9 +21,8 @@ import {
   People as PeopleIcon,
   Work as WorkIcon,
   Payment as PaymentIcon,
-  GrainRoundedIcon,
   PendingActions as PendingActionsIcon,
-  HistoryEduIcon,
+  History as HistoryIcon,
   Settings as SettingsIcon,
   Logout as LogoutIcon,
 } from '@mui/icons-material';
@@ -41,7 +40,7 @@ const menuItems = [
   { label: 'Jobs', href: '/jobs', icon: WorkIcon, permission: 'moderateJobs' },
   { label: 'Payments', href: '/payments', icon: PaymentIcon, permission: 'approvePayouts' },
   { label: 'Disputes', href: '/disputes', icon: PendingActionsIcon, permission: 'manageDisputes' },
-  { label: 'Audit Logs', href: '/audit-logs', icon: HistoryEduIcon, permission: 'viewAuditLog' },
+  { label: 'Audit Logs', href: '/audit-logs', icon: HistoryIcon, permission: 'viewAuditLog' },
   { label: 'Settings', href: '/settings', icon: SettingsIcon, permission: 'manageSiteSettings' },
 ];
 

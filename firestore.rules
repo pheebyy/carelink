@@ -14,6 +14,14 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.admin == true;
     }
 
+    function hasAdminRole(role) {
+      return isAuthenticated() && request.auth.token.admin_role == role;
+    }
+
+    function hasPermission(permission) {
+      return isAdmin() && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.permissions[permission] == true;
+    }
+
     function canCreateOwnUserDoc(uid) {
       return isUser(uid) &&
         !request.resource.data.keys().hasAny(['admin']) &&
@@ -42,6 +50,24 @@ service cloud.firestore {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/conversations/$(conversationId)) &&
         get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds.hasAny([request.auth.uid]);
+    }
+
+    // ========================= ADMIN COLLECTION (NEW) =========================
+    match /admins/{adminId} {
+      // Only admins can read other admins
+      allow read: if isAdmin();
+      
+      // Super admin only can create/update/delete admins
+      allow create, update, delete: if hasAdminRole('superadmin');
+    }
+
+    // ========================= AUDIT LOGS COLLECTION (NEW) =========================
+    match /auditLogs/{logId} {
+      // All admins can read audit logs if they have permission
+      allow read: if hasPermission('canViewAuditLog');
+      
+      // Admin operations (via Cloud Function only - no direct writes)
+      allow create: if false;
     }
 
     // ========================= USERS COLLECTION =========================
