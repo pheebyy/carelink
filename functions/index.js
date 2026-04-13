@@ -876,3 +876,637 @@ exports.onNewMessage = onDocumentCreated(
     }
   }
 );
+
+// ==========================================
+// 💰 AUTOMATED PAYOUT SYSTEM (Phase 1)
+// ==========================================
+
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+
+/**
+ * Generate payout batch (scheduled daily at 6 AM UTC)
+ * Groups completed unpaid transactions by caregiver
+ * Creates batch and individual payout records
+ */
+exports.generatePayoutBatch = onSchedule(
+  {
+    schedule: "0 6 * * *", // 6 AM UTC every day
+    timeZone: "UTC",
+    retryCount: 2,
+    maxInstances: 1, // Prevent concurrent batches
+  },
+  async (context) => {
+    console.log("🔄 Starting automated payout batch generation...");
+    
+    try {
+      const now = new Date();
+      const batchId = `batch_${now.toISOString().split("T")[0]}_${Date.now()}`;
+      const batchRef = db.collection("payoutBatches").doc(batchId);
+
+      // 1. Get all caregivers with completed transactions
+      const transactionsSnapshot = await db
+        .collection("transactions")
+        .where("status", "==", "completed")
+        .where("paidOut", "==", false) // Not yet paid out
+        .limit(1000) // Safety limit
+        .get();
+
+      if (transactionsSnapshot.empty) {
+        console.log("ℹ️  No transactions to process");
+        return { success: true, message: "No transactions to payout", processed: 0 };
+      }
+
+      // 2. Group by caregiver
+      const caregiverEarnings = {};
+      transactionsSnapshot.forEach((doc) => {
+        const tx = doc.data();
+        const caregiverId = tx.caregiverId;
+        
+        if (!caregiverId) return; // Skip if no caregiver
+        
+        if (!caregiverEarnings[caregiverId]) {
+          caregiverEarnings[caregiverId] = {
+            total: 0,
+            count: 0,
+            transactions: [],
+          };
+        }
+        
+        caregiverEarnings[caregiverId].total += tx.caregiverEarnings || 0;
+        caregiverEarnings[caregiverId].count += 1;
+        caregiverEarnings[caregiverId].transactions.push(doc.id);
+      });
+
+      // 3. Create payout records
+      const payouts = [];
+      const updates = [];
+
+      for (const [caregiverId, earning] of Object.entries(caregiverEarnings)) {
+        const grossAmount = earning.total;
+        const withholdingTax = 0; // TODO: Calculate based on jurisdiction
+        const netAmount = grossAmount - withholdingTax;
+
+        const payout = {
+          caregiverId,
+          batchId,
+          grossAmount,
+          withholdingTax,
+          netAmount,
+          transactionCount: earning.count,
+          transactionIds: earning.transactions,
+          status: "pending",
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          processedAt: null,
+          completedAt: null,
+          failureReason: null,
+          reference: null,
+        };
+
+        payouts.push(payout);
+        updates.push({
+          transactionIds: earning.transactions,
+          data: { paidOut: true, paidOutBatchId: batchId },
+        });
+      }
+
+      // 4. Create batch document
+      await batchRef.set({
+        batchId,
+        totalPayouts: payouts.length,
+        totalAmount: payouts.reduce((sum, p) => sum + p.netAmount, 0),
+        status: "pending",
+        payoutCycle: "daily",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        processedAt: null,
+        completedAt: null,
+        payoutMethod: "mpesa",
+      });
+
+      // 5. Create individual payout records
+      const payoutSubcollection = batchRef.collection("payouts");
+      for (const payout of payouts) {
+        await payoutSubcollection.add(payout);
+      }
+
+      // 6. Mark transactions as paid out and set next payout date
+      const batch = db.batch();
+      for (const update of updates) {
+        for (const txId of update.transactionIds) {
+          batch.update(db.collection("transactions").doc(txId), update.data);
+        }
+      }
+
+      // Set nextPayoutDate for affected caregivers (7 days from now)
+      const nextPayoutDate = new Date();
+      nextPayoutDate.setDate(nextPayoutDate.getDate() + 7);
+      
+      for (const caregiverId of Object.keys(caregiverEarnings)) {
+        batch.update(
+          db.collection("caregiver_wallets").doc(caregiverId),
+          { nextPayoutDate: nextPayoutDate }
+        );
+      }
+
+      await batch.commit();
+
+      console.log(`✅ Payout batch generated: ${batchId}`);
+      console.log(`   - Caregivers: ${payouts.length}`);
+      console.log(`   - Total amount: KES ${payouts.reduce((sum, p) => sum + p.netAmount, 0)}`);
+
+      return {
+        success: true,
+        batchId,
+        caregivers: payouts.length,
+        totalAmount: payouts.reduce((sum, p) => sum + p.netAmount, 0),
+      };
+    } catch (error) {
+      console.error("❌ Error generating payout batch:", error);
+      throw error;
+    }
+  }
+);
+
+// 📋 Get payout batch details (Admin API)
+exports.getPayoutBatchDetails = onCall(async (request) => {
+  if (!request.auth || !request.auth.token.admin) {
+    throw new HttpsError(
+      "permission-denied",
+      "Only admins can view payouts"
+    );
+  }
+
+  const { batchId } = request.data;
+  if (!batchId) {
+    throw new HttpsError(
+      "invalid-argument",
+      "batchId required"
+    );
+  }
+
+  try {
+    const batchDoc = await db.collection("payoutBatches").doc(batchId).get();
+    if (!batchDoc.exists) {
+      throw new HttpsError("not-found", "Batch not found");
+    }
+
+    const payoutsSnapshot = await db
+      .collection("payoutBatches")
+      .doc(batchId)
+      .collection("payouts")
+      .get();
+
+    const payouts = payoutsSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    return {
+      batch: {
+        id: batchDoc.id,
+        ...batchDoc.data(),
+      },
+      payouts,
+    };
+  } catch (error) {
+    console.error("Error fetching batch details:", error);
+    throw new HttpsError(
+      "internal",
+      "Failed to fetch batch details"
+    );
+  }
+});
+
+// ✅ Approve a payout batch (Admin)
+exports.approvPayoutBatch = onCall(async (request) => {
+  if (!request.auth || !request.auth.token.admin) {
+    throw new HttpsError(
+      "permission-denied",
+      "Admin only"
+    );
+  }
+
+  const { batchId } = request.data;
+  if (!batchId) {
+    throw new HttpsError(
+      "invalid-argument",
+      "batchId required"
+    );
+  }
+
+  try {
+    const batchRef = db.collection("payoutBatches").doc(batchId);
+    const batchDoc = await batchRef.get();
+
+    if (!batchDoc.exists) {
+      throw new HttpsError("not-found", "Batch not found");
+    }
+
+    if (batchDoc.data().status !== "pending") {
+      throw new HttpsError(
+        "failed-precondition",
+        `Cannot approve batch in ${batchDoc.data().status} status`
+      );
+    }
+
+    // Update batch status
+    await batchRef.update({
+      status: "processing",
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Update all payouts in batch
+    const payoutsSnapshot = await batchRef.collection("payouts").get();
+    const batch = db.batch();
+
+    payoutsSnapshot.forEach((doc) => {
+      batch.update(doc.ref, {
+        status: "processing",
+        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    await batch.commit();
+
+    console.log(`✅ Payout batch approved: ${batchId}`);
+
+    return { success: true, message: "Payout batch approved" };
+  } catch (error) {
+    console.error("Error approving batch:", error);
+    throw new HttpsError(
+      "internal",
+      "Failed to approve batch"
+    );
+  }
+});
+
+// 🎉 Complete payout (after M-Pesa/bank transfer succeeds)
+exports.completePayout = onCall(async (request) => {
+  if (!request.auth || !request.auth.token.admin) {
+    throw new HttpsError(
+      "permission-denied",
+      "Admin only"
+    );
+  }
+
+  const { payoutId, batchId, reference, method } = request.data;
+  if (!payoutId || !batchId || !reference) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Missing required fields"
+    );
+  }
+
+  try {
+    const payoutRef = db
+      .collection("payoutBatches")
+      .doc(batchId)
+      .collection("payouts")
+      .doc(payoutId);
+
+    const payoutDoc = await payoutRef.get();
+    if (!payoutDoc.exists) {
+      throw new HttpsError("not-found", "Payout not found");
+    }
+
+    const payout = payoutDoc.data();
+
+    // Update payout
+    await payoutRef.update({
+      status: "completed",
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      reference,
+      method: method || "mpesa",
+    });
+
+    console.log(`✅ Payout completed: ${payoutId}`);
+
+    return { success: true, message: "Payout marked as completed" };
+  } catch (error) {
+    console.error("Error completing payout:", error);
+    throw new HttpsError(
+      "internal",
+      "Failed to complete payout"
+    );
+  }
+});
+
+// ==========================================
+// 💰 INSTANT CANCELLATION REFUNDS (Phase 2)
+// ==========================================
+
+/**
+ * Initiate instant refund when job cancelled before start
+ * Called by mobile app or admin dashboard
+ */
+exports.initiateInstantRefund = onCall(async (request) => {
+  const { jobId, reason, cancelledBy } = request.data;
+  
+  if (!jobId || !reason || !cancelledBy) {
+    throw new HttpsError(
+      "invalid-argument",
+      "jobId, reason, and cancelledBy required"
+    );
+  }
+
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  try {
+    // 1. Get the job
+    const jobRef = db.collection("jobs").doc(jobId);
+    const jobDoc = await jobRef.get();
+    
+    if (!jobDoc.exists) {
+      throw new HttpsError("not-found", "Job not found");
+    }
+
+    const job = jobDoc.data();
+    const currentTime = Date.now();
+    const startTime = job.startDate ? job.startDate.toMillis() : null;
+
+    // 2. Validate: Job can only be cancelled before start time
+    if (startTime && currentTime > startTime) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Cannot refund: Job has already started"
+      );
+    }
+
+    // 3. Check if job is in refundable status
+    const refundableStatuses = ["open", "applied", "hired"];
+    if (!refundableStatuses.includes(job.status)) {
+      throw new HttpsError(
+        "failed-precondition",
+        `Cannot refund job with status: ${job.status}`
+      );
+    }
+
+    // 4. Get payment transaction
+    const paymentRef = job.paymentReference;
+    if (!paymentRef) {
+      throw new HttpsError(
+        "not-found",
+        "No payment found for this job"
+      );
+    }
+
+    const transactionDoc = await db.collection("transactions").doc(paymentRef).get();
+    if (!transactionDoc.exists) {
+      throw new HttpsError("not-found", "Payment transaction not found");
+    }
+
+    const transaction = transactionDoc.data();
+
+    // 5. Check if already refunded
+    if (transaction.status === "refunded") {
+      throw new HttpsError(
+        "failed-precondition",
+        "This payment has already been refunded"
+      );
+    }
+
+    // 6. Authorization check: Only client or admin can refund
+    const isClient = request.auth.uid === job.clientId;
+    const isAdmin = request.auth.token.admin;
+    
+    if (!isClient && !isAdmin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only client or admin can refund this job"
+      );
+    }
+
+    // 7. Create refund record
+    const refundId = `refund_${jobId}_${Date.now()}`;
+    const refundRef = db.collection("refunds").doc(refundId);
+
+    await refundRef.set({
+      refundId,
+      jobId,
+      transactionId: paymentRef,
+      clientId: job.clientId,
+      caregiverId: job.caregiverId || null,
+      amount: transaction.amount,
+      currency: "KES",
+      reason,
+      cancelledBy,
+      status: "pending",
+      paymentMethod: "paystack",
+      refundMethod: "paystack",
+      paystackReference: transaction.reference,
+      refundReference: null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      processedAt: null,
+      completedAt: null,
+      failureReason: null,
+      attempts: 0,
+      maxAttempts: 3,
+    });
+
+    // 8. Update job status to cancelled
+    await jobRef.update({
+      status: "canceled",
+      canceledAt: admin.firestore.FieldValue.serverTimestamp(),
+      cancelReason: reason,
+      cancelledBy: cancelledBy,
+    });
+
+    // 9. Update transaction status
+    await db.collection("transactions").doc(paymentRef).update({
+      status: "refunding",
+      refundId: refundId,
+      refundInitiatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log(`✅ Instant refund initiated: ${refundId}`);
+    
+    return {
+      success: true,
+      refundId,
+      message: "Refund initiated",
+      amount: transaction.amount,
+      status: "pending",
+    };
+  } catch (error) {
+    console.error("❌ Error initiating refund:", error);
+    throw error;
+  }
+});
+
+/**
+ * Get refund details (Admin API)
+ */
+exports.getRefundDetails = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  const { refundId } = request.data;
+  if (!refundId) {
+    throw new HttpsError("invalid-argument", "refundId required");
+  }
+
+  try {
+    const refundDoc = await db.collection("refunds").doc(refundId).get();
+    
+    if (!refundDoc.exists) {
+      throw new HttpsError("not-found", "Refund not found");
+    }
+
+    const refund = refundDoc.data();
+
+    // Authorization: Admin or the client who initiated refund
+    const isAdmin = request.auth.token.admin;
+    const isClient = request.auth.uid === refund.clientId;
+
+    if (!isAdmin && !isClient) {
+      throw new HttpsError("permission-denied", "Cannot view this refund");
+    }
+
+    return {
+      id: refundDoc.id,
+      ...refund,
+    };
+  } catch (error) {
+    console.error("Error fetching refund details:", error);
+    throw new HttpsError("internal", "Failed to fetch refund details");
+  }
+});
+
+/**
+ * List all refunds with filters (Admin Dashboard)
+ */
+exports.listRefunds = onCall(async (request) => {
+  if (!request.auth || !request.auth.token.admin) {
+    throw new HttpsError("permission-denied", "Only admins can view refunds");
+  }
+
+  const { status, limit = 50 } = request.data;
+
+  try {
+    let query = db.collection("refunds").orderBy("createdAt", "desc");
+
+    if (status) {
+      query = query.where("status", "==", status);
+    }
+
+    query = query.limit(limit);
+
+    const snapshot = await query.get();
+    const refunds = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    return {
+      refunds,
+      count: refunds.length,
+    };
+  } catch (error) {
+    console.error("Error listing refunds:", error);
+    throw new HttpsError("internal", "Failed to list refunds");
+  }
+});
+
+/**
+ * Retry failed refund (Admin)
+ */
+exports.retryFailedRefund = onCall(async (request) => {
+  if (!request.auth || !request.auth.token.admin) {
+    throw new HttpsError("permission-denied", "Admin only");
+  }
+
+  const { refundId } = request.data;
+  if (!refundId) {
+    throw new HttpsError("invalid-argument", "refundId required");
+  }
+
+  try {
+    const refundDoc = await db.collection("refunds").doc(refundId).get();
+    
+    if (!refundDoc.exists) {
+      throw new HttpsError("not-found", "Refund not found");
+    }
+
+    const refund = refundDoc.data();
+
+    // Check if max attempts exceeded
+    if (refund.attempts >= refund.maxAttempts) {
+      throw new HttpsError(
+        "failed-precondition",
+        `Max retry attempts (${refund.maxAttempts}) exceeded`
+      );
+    }
+
+    // Mark as retrying
+    await db.collection("refunds").doc(refundId).update({
+      status: "pending",
+      attempts: admin.firestore.FieldValue.increment(1),
+      failureReason: null,
+    });
+
+    console.log(`🔄 Refund retry initiated: ${refundId}`);
+
+    return {
+      success: true,
+      message: "Refund retry initiated",
+    };
+  } catch (error) {
+    console.error("Error retrying refund:", error);
+    throw new HttpsError("internal", "Failed to retry refund");
+  }
+});
+
+/**
+ * Manual refund approval (Admin override)
+ */
+exports.manualRefundApproval = onCall(async (request) => {
+  if (!request.auth || !request.auth.token.admin) {
+    throw new HttpsError("permission-denied", "Admin only");
+  }
+
+  const { refundId, approvalNote } = request.data;
+  if (!refundId) {
+    throw new HttpsError("invalid-argument", "refundId required");
+  }
+
+  try {
+    const refundRef = db.collection("refunds").doc(refundId);
+    const refundDoc = await refundRef.get();
+    
+    if (!refundDoc.exists) {
+      throw new HttpsError("not-found", "Refund not found");
+    }
+
+    const refund = refundDoc.data();
+
+    // Mark as manually approved
+    await refundRef.update({
+      status: "completed",
+      manuallyApprovedBy: request.auth.uid,
+      approvalNote: approvalNote || "Manual admin approval",
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Update transaction
+    await db
+      .collection("transactions")
+      .doc(refund.transactionId)
+      .update({
+        status: "refunded",
+        refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+        manualRefund: true,
+      });
+
+    console.log(`✅ Manual refund approved: ${refundId}`);
+
+    return {
+      success: true,
+      message: "Refund manually approved",
+    };
+  } catch (error) {
+    console.error("Error approving manual refund:", error);
+    throw new HttpsError("internal", "Failed to approve refund");
+  }
+});

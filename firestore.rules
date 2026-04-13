@@ -396,6 +396,40 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ========================= PAYOUT BATCHES (NEW) =========================
+    match /payoutBatches/{batchId} {
+      // Admins can read all payout batches
+      allow read: if isAdmin();
+      
+      // Cloud Functions create/update batches
+      allow create, update: if !isAuthenticated();
+      
+      // Never allow deletion (audit trail)
+      allow delete: if false;
+      
+      // Payout records within batch
+      match /payouts/{payoutId} {
+        allow read: if isAdmin() || (isAuthenticated() && resource.data.caregiverId == request.auth.uid);
+        allow create, update: if !isAuthenticated();
+        allow delete: if false;
+      }
+    }
+
+    // ========================= REFUNDS COLLECTION (Phase 2) =========================
+    match /refunds/{refundId} {
+      // Admins can read all refunds
+      allow read: if isAdmin();
+      
+      // Clients can read their own refunds
+      allow read: if isAuthenticated() && resource.data.clientId == request.auth.uid;
+
+      // Cloud Functions can create/update refunds (triggered by initiateInstantRefund)
+      allow create, update: if !isAuthenticated();
+
+      // Never allow deletion (audit trail)
+      allow delete: if false;
+    }
+
     // ========================= NOTIFICATIONS COLLECTION =========================
     // In-app notifications for job updates and reviews
     match /notifications/{notificationId} {
