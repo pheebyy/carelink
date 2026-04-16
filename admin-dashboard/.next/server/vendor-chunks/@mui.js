@@ -81,6 +81,16 @@ eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpac
 
 /***/ }),
 
+/***/ "./node_modules/@mui/icons-material/esm/VerifiedUser.js":
+/*!**************************************************************!*\
+  !*** ./node_modules/@mui/icons-material/esm/VerifiedUser.js ***!
+  \**************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpack_require__.d(__webpack_exports__, {\n/* harmony export */   \"default\": () => (__WEBPACK_DEFAULT_EXPORT__)\n/* harmony export */ });\n/* harmony import */ var _utils_createSvgIcon__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./utils/createSvgIcon */ \"./node_modules/@mui/icons-material/esm/utils/createSvgIcon.js\");\n/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react/jsx-runtime */ \"react/jsx-runtime\");\n/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__);\n/* __next_internal_client_entry_do_not_use__ default auto */ \n\n/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ((0,_utils_createSvgIcon__WEBPACK_IMPORTED_MODULE_1__[\"default\"])(/*#__PURE__*/ (0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(\"path\", {\n    d: \"M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5zm-2 16-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9z\"\n}), \"VerifiedUser\"));\n//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiLi9ub2RlX21vZHVsZXMvQG11aS9pY29ucy1tYXRlcmlhbC9lc20vVmVyaWZpZWRVc2VyLmpzIiwibWFwcGluZ3MiOiI7Ozs7Ozs7NkRBRWtEO0FBQ0Y7QUFDaEQsaUVBQWVBLGdFQUFhQSxDQUFFLFdBQVcsR0FBRUUsc0RBQUlBLENBQUMsUUFBUTtJQUN0REMsR0FBRztBQUNMLElBQUksaUJBQWdCIiwic291cmNlcyI6WyJ3ZWJwYWNrOi8vY2FyZWxpbmstYWRtaW4tZGFzaGJvYXJkLy4vbm9kZV9tb2R1bGVzL0BtdWkvaWNvbnMtbWF0ZXJpYWwvZXNtL1ZlcmlmaWVkVXNlci5qcz80ZTA1Il0sInNvdXJjZXNDb250ZW50IjpbIlwidXNlIGNsaWVudFwiO1xuXG5pbXBvcnQgY3JlYXRlU3ZnSWNvbiBmcm9tICcuL3V0aWxzL2NyZWF0ZVN2Z0ljb24nO1xuaW1wb3J0IHsganN4IGFzIF9qc3ggfSBmcm9tIFwicmVhY3QvanN4LXJ1bnRpbWVcIjtcbmV4cG9ydCBkZWZhdWx0IGNyZWF0ZVN2Z0ljb24oIC8qI19fUFVSRV9fKi9fanN4KFwicGF0aFwiLCB7XG4gIGQ6IFwiTTEyIDEgMyA1djZjMCA1LjU1IDMuODQgMTAuNzQgOSAxMiA1LjE2LTEuMjYgOS02LjQ1IDktMTJWNXptLTIgMTYtNC00IDEuNDEtMS40MUwxMCAxNC4xN2w2LjU5LTYuNTlMMTggOXpcIlxufSksICdWZXJpZmllZFVzZXInKTsiXSwibmFtZXMiOlsiY3JlYXRlU3ZnSWNvbiIsImpzeCIsIl9qc3giLCJkIl0sInNvdXJjZVJvb3QiOiIifQ==\n//# sourceURL=webpack-internal:///./node_modules/@mui/icons-material/esm/VerifiedUser.js\n");
+
+/***/ }),
+
 /***/ "./node_modules/@mui/icons-material/esm/Work.js":
 /*!******************************************************!*\
   !*** ./node_modules/@mui/icons-material/esm/Work.js ***!

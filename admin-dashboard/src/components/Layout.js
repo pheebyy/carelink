@@ -19,6 +19,7 @@ import {
 import {
   Dashboard as DashboardIcon,
   People as PeopleIcon,
+  VerifiedUser as VerifiedUserIcon,
   Work as WorkIcon,
   Payment as PaymentIcon,
   PendingActions as PendingActionsIcon,
@@ -38,6 +39,7 @@ const DRAWER_WIDTH = 280;
 const menuItems = [
   { label: 'Dashboard', href: '/dashboard', icon: DashboardIcon, permission: null },
   { label: 'Users', href: '/users', icon: PeopleIcon, permission: 'manageUsers' },
+  { label: 'Verification', href: '/verification', icon: VerifiedUserIcon, permission: 'manageUsers' },
   { label: 'Jobs', href: '/jobs', icon: WorkIcon, permission: 'moderateJobs' },
   { label: 'Payments', href: '/payments', icon: PaymentIcon, permission: 'approvePayouts' },
   { label: 'Disputes', href: '/disputes', icon: PendingActionsIcon, permission: 'manageDisputes' },

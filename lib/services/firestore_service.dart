@@ -46,6 +46,44 @@ class FirestoreService {
     return _db.collection('users').doc(uid).snapshots();
   }
 
+  // ========================= VERIFICATION =========================
+  /// Submit verification documents for caregiver
+  /// documents: List of maps with: {documentType, storageUrl, fileName, documentValue}
+  Future<void> submitVerificationDocuments({
+    required String caregiverId,
+    required List<Map<String, String>> documents,
+  }) async {
+    try {
+      if (caregiverId.isEmpty) throw Exception("Caregiver ID is required");
+      if (documents.isEmpty) throw Exception("At least one document is required");
+      if (documents.length > 3) throw Exception("Maximum 3 documents allowed");
+
+      // Convert documents to VerificationDocument format
+      final verificationDocuments = documents
+          .map((doc) => {
+                'documentType': doc['documentType'] ?? '',
+                'fileName': doc['fileName'] ?? '',
+                'storageUrl': doc['storageUrl'] ?? '',
+                'uploadedAt': FieldValue.serverTimestamp(),
+                'documentValue': doc['documentValue'] ?? '',
+                'status': 'submitted',
+              })
+          .toList();
+
+      await _db.collection('users').doc(caregiverId).update({
+        'verificationDocuments': FieldValue.arrayUnion(verificationDocuments),
+        'verificationStatus': 'pending',
+        'verificationSubmittedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      print('✅ Verification documents submitted for caregiver: $caregiverId');
+    } catch (e) {
+      print('🔥 Error submitting verification documents: $e');
+      rethrow;
+    }
+  }
+
   // ========================= JOBS =========================
   Future<String> createJob({
     required String clientId,
@@ -175,6 +213,18 @@ class FirestoreService {
       }
       if (amount <= 0) {
         throw Exception("Bid amount must be greater than 0");
+      }
+
+      // ✅ VERIFICATION GATE: Check if caregiver is verified
+      final caregiverSnap = await _db.collection('users').doc(caregiverId).get();
+      if (!caregiverSnap.exists) {
+        throw Exception("Caregiver not found");
+      }
+      
+      final caregiverData = caregiverSnap.data() ?? <String, dynamic>{};
+      final verificationStatus = caregiverData['verificationStatus'];
+      if (verificationStatus != 'approved') {
+        throw Exception('You must complete verification to bid on jobs. Current status: $verificationStatus');
       }
 
       final jobRef = _db.collection('jobs').doc(jobId);

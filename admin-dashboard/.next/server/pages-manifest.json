@@ -2,7 +2,6 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/payments": "pages/payments.js",
   "/disputes": "pages/disputes.js",
   "/audit-logs": "pages/audit-logs.js",
   "/settings": "pages/settings.js"

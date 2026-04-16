@@ -19,6 +19,7 @@ import 'screens/review_submission_screen.dart';
 import 'screens/caregiver_analytics_dashboard.dart';
 import 'screens/caregiver_availability_screen.dart';
 import 'screens/job_search_filter_screen.dart';
+import 'screens/caregiver_verification_screen.dart';
 import 'screens/payment_caregiver_verification_screen.dart';
 import 'screens/caregiver_payment_history_screen.dart';
 import 'screens/client_payment_history_screen.dart';
@@ -131,6 +132,13 @@ class CarelinkApp extends ConsumerWidget {
               job: job,
               caregiverId: caregiverId,
             ),
+          );
+        }
+
+        // ===== CAREGIVER VERIFICATION ROUTE =====
+        if (settings.name == '/caregiver-verification') {
+          return MaterialPageRoute(
+            builder: (_) => const CaregiverVerificationScreen(),
           );
         }
 

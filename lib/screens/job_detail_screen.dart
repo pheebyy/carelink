@@ -50,6 +50,59 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
+    // ✅ VERIFICATION GATE: Check if caregiver is verified
+    final userDoc = await _fs.getUser(uid);
+    final verificationStatus = userDoc['verificationStatus'];
+
+    if (verificationStatus != 'approved') {
+      // Show verification required dialog
+      if (!mounted) return;
+      return showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Verification Required'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.lock, size: 48, color: Colors.orange),
+              const SizedBox(height: 16),
+              const Text(
+                'You must complete verification to bid on jobs.',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Status: ${verificationStatus ?? 'pending'}',
+                style: const TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Submit your verification documents (practice license, national ID, and passport photo) for admin review.',
+                style: TextStyle(fontSize: 13),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/caregiver-verification');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+              ),
+              child: const Text('Start Verification'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
