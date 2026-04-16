@@ -13,11 +13,22 @@ import {
   Grid,
   Chip,
   MenuItem,
+  Divider,
+  LinearProgress,
 } from '@mui/material';
 import { db } from '../lib/firebase';
 import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { DataTable } from '../components/DataTable';
-import { formatDate, formatCurrency, getStatusIcon, getStatusColor } from '../lib/utils';
+import { StatusBadge } from '../components/StatusBadge';
+import { StatCard } from '../components/StatCard';
+import { formatDate, formatCurrency } from '../lib/utils';
+import { COLORS, SHADOWS, TRANSITIONS } from '../lib/themeConstants';
+import {
+  Work as WorkIcon,
+  PublishedWithChanges as ApprovedIcon,
+  Flag as FlagIcon,
+  TrendingUp as TrendingUpIcon,
+} from '@mui/icons-material';
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState([]);
@@ -30,6 +41,13 @@ export default function JobsPage() {
   const [openAction, setOpenAction] = useState(false);
   const [actionType, setActionType] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
+  const [stats, setStats] = useState({
+    totalJobs: 0,
+    active: 0,
+    pending: 0,
+    completed: 0,
+    flagged: 0,
+  });
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -39,6 +57,17 @@ export default function JobsPage() {
           id: doc.id,
           ...doc.data(),
         }));
+        
+        // Calculate statistics
+        const statsData = {
+          totalJobs: jobsList.length,
+          active: jobsList.filter(j => j.status === 'active' || j.status === 'open').length,
+          pending: jobsList.filter(j => j.status === 'pending').length,
+          completed: jobsList.filter(j => j.status === 'completed').length,
+          flagged: jobsList.filter(j => j.flagged).length,
+        };
+        
+        setStats(statsData);
         setJobs(jobsList);
       } catch (error) {
         console.error('Error fetching jobs:', error);
@@ -114,7 +143,7 @@ export default function JobsPage() {
       key: 'title',
       label: 'Job Title',
       render: (value) => (
-        <Typography sx={{ cursor: 'pointer', color: '#4CAF50', fontWeight: 500 }}>
+        <Typography sx={{ cursor: 'pointer', color: COLORS.primary, fontWeight: 500 }}>
           {value || 'Untitled'}
         </Typography>
       ),
@@ -122,34 +151,30 @@ export default function JobsPage() {
     {
       key: 'budget',
       label: 'Budget',
-      render: (value) => `KES ${value?.toLocaleString() || '0'}`,
+      render: (value) => (
+        <Typography sx={{ fontWeight: 600, color: COLORS.primary }}>
+          KES {value?.toLocaleString() || '0'}
+        </Typography>
+      ),
     },
     {
       key: 'status',
       label: 'Status',
-      render: (value) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <span>{getStatusIcon(value || 'pending')}</span>
-          <Chip
-            label={value || 'pending'}
-            size="small"
-            sx={{
-              backgroundColor: getStatusColor(value || 'pending') + '20',
-              color: getStatusColor(value || 'pending'),
-            }}
-          />
-        </Box>
-      ),
+      render: (value) => <StatusBadge status={value || 'pending'} variant="soft" size="small" />,
     },
     {
       key: 'flagged',
       label: 'Flagged',
-      render: (value) => (value ? <Chip label="Flagged" size="small" color="error" /> : '-'),
+      render: (value) => (value ? <StatusBadge status="warning" label="Flagged" variant="soft" size="small" /> : '—'),
     },
     {
       key: 'applicants',
       label: 'Applicants',
-      render: (value) => value || '0',
+      render: (value) => (
+        <Typography sx={{ fontWeight: 600, color: COLORS.gray900 }}>
+          {value || '0'}
+        </Typography>
+      ),
     },
     {
       key: 'createdAt',
@@ -160,13 +185,87 @@ export default function JobsPage() {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 3 }}>
-        Job Moderation
-      </Typography>
+      {/* Page Header */}
+      <Box sx={{ mb: 4 }}>
+        <Typography
+          variant="h3"
+          sx={{
+            fontWeight: 700,
+            color: COLORS.gray900,
+            mb: 0.5,
+          }}
+        >
+          Job Moderation
+        </Typography>
+        <Typography
+          variant="body2"
+          sx={{
+            color: COLORS.gray600,
+          }}
+        >
+          Review, approve, and manage job postings on the platform.
+        </Typography>
+      </Box>
+
+      {/* Statistics Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="Total Jobs"
+            value={stats.totalJobs}
+            icon={WorkIcon}
+            loading={loading}
+            color={COLORS.primary}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="Active Jobs"
+            value={stats.active}
+            icon={ApprovedIcon}
+            loading={loading}
+            color={COLORS.success}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="Pending Review"
+            value={stats.pending}
+            icon={WorkIcon}
+            loading={loading}
+            color={COLORS.pending}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="Flagged"
+            value={stats.flagged}
+            icon={FlagIcon}
+            loading={loading}
+            color={COLORS.error}
+          />
+        </Grid>
+      </Grid>
 
       {/* Filters */}
-      <Card sx={{ mb: 3 }}>
+      <Card
+        sx={{
+          mb: 3,
+          boxShadow: SHADOWS.sm,
+          transition: TRANSITIONS.smooth,
+        }}
+      >
         <CardContent>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 600,
+              color: COLORS.gray900,
+              mb: 2,
+            }}
+          >
+            Filters
+          </Typography>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6} md={3}>
               <TextField
@@ -175,6 +274,11 @@ export default function JobsPage() {
                 placeholder="Search jobs..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '8px',
+                  },
+                }}
               />
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
@@ -184,6 +288,11 @@ export default function JobsPage() {
                 size="small"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '8px',
+                  },
+                }}
               >
                 <MenuItem value="all">All Status</MenuItem>
                 <MenuItem value="pending">Pending Approval</MenuItem>
@@ -197,7 +306,15 @@ export default function JobsPage() {
       </Card>
 
       {/* Jobs Table */}
-      <Card>
+      <Card
+        sx={{
+          boxShadow: SHADOWS.sm,
+          transition: TRANSITIONS.smooth,
+          '&:hover': {
+            boxShadow: SHADOWS.md,
+          },
+        }}
+      >
         <CardContent>
           <DataTable
             columns={columns}
@@ -211,12 +328,13 @@ export default function JobsPage() {
 
       {/* Job Detail Dialog */}
       <Dialog open={openDetail} onClose={() => setOpenDetail(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Job Details</DialogTitle>
-        <DialogContent>
+        <DialogTitle sx={{ fontWeight: 700, color: COLORS.gray900 }}>Job Details</DialogTitle>
+        <Divider />
+        <DialogContent sx={{ pt: 2 }}>
           {selectedJob && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Box>
-                <Typography variant="body2" color="textSecondary">
+                <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.gray600, mb: 0.5 }}>
                   Title
                 </Typography>
                 <Typography variant="body1">{selectedJob.title}</Typography>

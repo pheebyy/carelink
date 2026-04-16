@@ -1,1 +1,9 @@
-{"/_app":"pages/_app.js","/audit-logs":"pages/audit-logs.html","/_error":"pages/_error.js","/dashboard":"pages/dashboard.html","/disputes":"pages/disputes.html","/jobs":"pages/jobs.html","/login":"pages/login.html","/payments":"pages/payments.html","/payouts":"pages/payouts.html","/refunds":"pages/refunds.html","/settings":"pages/settings.html","/users":"pages/users.html","/_document":"pages/_document.js","/404":"pages/404.html"}
+{
+  "/_app": "pages/_app.js",
+  "/_error": "pages/_error.js",
+  "/_document": "pages/_document.js",
+  "/payments": "pages/payments.js",
+  "/disputes": "pages/disputes.js",
+  "/audit-logs": "pages/audit-logs.js",
+  "/settings": "pages/settings.js"
+}

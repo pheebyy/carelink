@@ -156,3 +156,6 @@ export const StatCard = ({
     </Card>
   );
 };
+
+// Default export for backward compatibility
+export default StatCard;

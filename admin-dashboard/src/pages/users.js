@@ -14,12 +14,23 @@ import {
   Chip,
   Alert,
   MenuItem,
+  LinearProgress,
+  Divider,
 } from '@mui/material';
 import { db } from '../lib/firebase';
 import { collection, getDocs, query, where, updateDoc, doc } from 'firebase/firestore';
 import { DataTable } from '../components/DataTable';
-import { formatDate, formatCurrency, getStatusIcon, getStatusColor } from '../lib/utils';
+import { StatusBadge } from '../components/StatusBadge';
+import { StatCard } from '../components/StatCard';
+import { formatDate, formatCurrency } from '../lib/utils';
 import { useAdmin } from '../context/AdminContext';
+import { COLORS, SHADOWS, TRANSITIONS } from '../lib/themeConstants';
+import {
+  People as PeopleIcon,
+  VerifiedUser as VerifiedUserIcon,
+  Warning as WarningIcon,
+  TrendingUp as TrendingUpIcon,
+} from '@mui/icons-material';
 
 export default function UsersPage() {
   const { canPerform } = useAdmin();
@@ -34,6 +45,14 @@ export default function UsersPage() {
   const [openAction, setOpenAction] = useState(false);
   const [actionType, setActionType] = useState('');
   const [actionReason, setActionReason] = useState('');
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    caregivers: 0,
+    clients: 0,
+    verified: 0,
+    pending: 0,
+    rejected: 0,
+  });
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -43,6 +62,18 @@ export default function UsersPage() {
           id: doc.id,
           ...doc.data(),
         }));
+        
+        // Calculate statistics
+        const statsData = {
+          totalUsers: usersList.length,
+          caregivers: usersList.filter(u => u.role === 'caregiver').length,
+          clients: usersList.filter(u => u.role === 'client').length,
+          verified: usersList.filter(u => u.verificationStatus === 'approved').length,
+          pending: usersList.filter(u => u.verificationStatus === 'pending_verification').length,
+          rejected: usersList.filter(u => u.verificationStatus === 'rejected').length,
+        };
+        
+        setStats(statsData);
         setUsers(usersList);
       } catch (error) {
         console.error('Error fetching users:', error);
@@ -122,7 +153,7 @@ export default function UsersPage() {
       key: 'name',
       label: 'Name',
       render: (value, row) => (
-        <Box sx={{ cursor: 'pointer', color: '#4CAF50' }}>
+        <Box sx={{ cursor: 'pointer', fontWeight: 500, color: COLORS.gray900 }}>
           {value || row.email?.split('@')[0]}
         </Box>
       ),
@@ -130,30 +161,28 @@ export default function UsersPage() {
     {
       key: 'email',
       label: 'Email',
+      render: (value) => (
+        <Typography variant="body2" sx={{ color: COLORS.gray600 }}>
+          {value}
+        </Typography>
+      ),
     },
     {
       key: 'role',
       label: 'Role',
       render: (value) => (
-        <Chip label={value} size="small" color={value === 'caregiver' ? 'primary' : 'secondary'} />
+        <StatusBadge
+          status={value === 'caregiver' ? 'active' : 'active'}
+          label={value === 'caregiver' ? 'Caregiver' : 'Client'}
+          variant="soft"
+          size="small"
+        />
       ),
     },
     {
       key: 'verificationStatus',
       label: 'Verification',
-      render: (value) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <span>{getStatusIcon(value || 'pending')}</span>
-          <Chip
-            label={value || 'pending'}
-            size="small"
-            sx={{
-              backgroundColor: getStatusColor(value || 'pending') + '20',
-              color: getStatusColor(value || 'pending'),
-            }}
-          />
-        </Box>
-      ),
+      render: (value) => <StatusBadge status={value || 'pending'} variant="soft" size="small" />,
     },
     {
       key: 'createdAt',
@@ -163,19 +192,99 @@ export default function UsersPage() {
     {
       key: 'rating',
       label: 'Rating',
-      render: (value) => (value ? `⭐ ${value.toFixed(1)}` : '-'),
+      render: (value) => (
+        <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.primary }}>
+          {value ? `⭐ ${value.toFixed(1)}` : '—'}
+        </Typography>
+      ),
     },
   ];
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 3 }}>
-        User Management
-      </Typography>
+      {/* Page Header */}
+      <Box sx={{ mb: 4 }}>
+        <Typography
+          variant="h3"
+          sx={{
+            fontWeight: 700,
+            color: COLORS.gray900,
+            mb: 0.5,
+          }}
+        >
+          User Management
+        </Typography>
+        <Typography
+          variant="body2"
+          sx={{
+            color: COLORS.gray600,
+          }}
+        >
+          Manage caregivers, clients, and user verification status.
+        </Typography>
+      </Box>
+
+      {/* Statistics Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="Total Users"
+            value={stats.totalUsers}
+            icon={PeopleIcon}
+            loading={loading}
+            color={COLORS.primary}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="Verified Users"
+            value={stats.verified}
+            subtitle={`${Math.round((stats.verified / stats.totalUsers) * 100 || 0)}% verified`}
+            icon={VerifiedUserIcon}
+            loading={loading}
+            color={COLORS.success}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="Pending Verification"
+            value={stats.pending}
+            icon={WarningIcon}
+            loading={loading}
+            color={COLORS.pending}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard
+            title="Role Distribution"
+            value={`${stats.caregivers}C / ${stats.clients}U`}
+            subtitle="Caregivers / Clients"
+            icon={TrendingUpIcon}
+            loading={loading}
+            color={COLORS.info}
+          />
+        </Grid>
+      </Grid>
 
       {/* Filters */}
-      <Card sx={{ mb: 3 }}>
+      <Card
+        sx={{
+          mb: 3,
+          boxShadow: SHADOWS.sm,
+          transition: TRANSITIONS.smooth,
+        }}
+      >
         <CardContent>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 600,
+              color: COLORS.gray900,
+              mb: 2,
+            }}
+          >
+            Filters
+          </Typography>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6} md={3}>
               <TextField
@@ -184,6 +293,11 @@ export default function UsersPage() {
                 placeholder="Search by name or email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '8px',
+                  },
+                }}
               />
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
@@ -193,9 +307,14 @@ export default function UsersPage() {
                 size="small"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '8px',
+                  },
+                }}
               >
                 <MenuItem value="all">All Status</MenuItem>
-                <MenuItem value="pending_verification">Pending Verification</MenuItem>
+                <MenuItem value="pending_verification">Pending</MenuItem>
                 <MenuItem value="approved">Approved</MenuItem>
                 <MenuItem value="rejected">Rejected</MenuItem>
               </TextField>
@@ -207,6 +326,11 @@ export default function UsersPage() {
                 size="small"
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '8px',
+                  },
+                }}
               >
                 <MenuItem value="all">All Roles</MenuItem>
                 <MenuItem value="caregiver">Caregivers</MenuItem>
@@ -218,7 +342,15 @@ export default function UsersPage() {
       </Card>
 
       {/* Users Table */}
-      <Card>
+      <Card
+        sx={{
+          boxShadow: SHADOWS.sm,
+          transition: TRANSITIONS.smooth,
+          '&:hover': {
+            boxShadow: SHADOWS.md,
+          },
+        }}
+      >
         <CardContent>
           <DataTable
             columns={columns}
@@ -232,59 +364,66 @@ export default function UsersPage() {
 
       {/* User Detail Dialog */}
       <Dialog open={openDetail} onClose={() => setOpenDetail(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>User Details</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: COLORS.gray900 }}>User Details</DialogTitle>
+        <Divider />
         <DialogContent>
           {selectedUser && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
               <Box>
-                <Typography variant="body2" color="textSecondary">
+                <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.gray600, mb: 0.5 }}>
                   Name
                 </Typography>
-                <Typography variant="body1">{selectedUser.name || selectedUser.email}</Typography>
+                <Typography variant="body1" sx={{ color: COLORS.gray900 }}>
+                  {selectedUser.name || selectedUser.email}
+                </Typography>
               </Box>
               <Box>
-                <Typography variant="body2" color="textSecondary">
+                <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.gray600, mb: 0.5 }}>
                   Email
                 </Typography>
-                <Typography variant="body1">{selectedUser.email}</Typography>
+                <Typography variant="body1" sx={{ color: COLORS.gray900 }}>
+                  {selectedUser.email}
+                </Typography>
               </Box>
               <Box>
-                <Typography variant="body2" color="textSecondary">
+                <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.gray600, mb: 0.5 }}>
                   Role
                 </Typography>
-                <Chip label={selectedUser.role} size="small" />
+                <StatusBadge
+                  status={selectedUser.role === 'caregiver' ? 'active' : 'active'}
+                  label={selectedUser.role === 'caregiver' ? 'Caregiver' : 'Client'}
+                  variant="soft"
+                />
               </Box>
               <Box>
-                <Typography variant="body2" color="textSecondary">
+                <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.gray600, mb: 0.5 }}>
                   Verification Status
                 </Typography>
-                <Chip
-                  label={selectedUser.verificationStatus || 'pending'}
-                  size="small"
-                  sx={{
-                    backgroundColor: getStatusColor(selectedUser.verificationStatus || 'pending') + '20',
-                    color: getStatusColor(selectedUser.verificationStatus || 'pending'),
-                  }}
-                />
+                <StatusBadge status={selectedUser.verificationStatus || 'pending'} variant="soft" />
               </Box>
               {selectedUser.verificationNotes && (
                 <Box>
-                  <Typography variant="body2" color="textSecondary">
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.gray600, mb: 0.5 }}>
                     Notes
                   </Typography>
-                  <Typography variant="body2">{selectedUser.verificationNotes}</Typography>
+                  <Typography variant="body2" sx={{ color: COLORS.gray600 }}>
+                    {selectedUser.verificationNotes}
+                  </Typography>
                 </Box>
               )}
               <Box>
-                <Typography variant="body2" color="textSecondary">
+                <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.gray600, mb: 0.5 }}>
                   Joined
                 </Typography>
-                <Typography variant="body2">{formatDate(selectedUser.createdAt)}</Typography>
+                <Typography variant="body2" sx={{ color: COLORS.gray600 }}>
+                  {formatDate(selectedUser.createdAt)}
+                </Typography>
               </Box>
             </Box>
           )}
         </DialogContent>
-        <DialogActions>
+        <Divider />
+        <DialogActions sx={{ p: 2 }}>
           {canPerform('verifyCaregiver') && selectedUser?.role === 'caregiver' && (
             <>
               <Button
@@ -293,7 +432,7 @@ export default function UsersPage() {
                   setOpenAction(true);
                 }}
                 variant="contained"
-                color="success"
+                sx={{ backgroundColor: COLORS.success }}
               >
                 Approve
               </Button>
@@ -302,7 +441,7 @@ export default function UsersPage() {
                   setActionType('reject');
                   setOpenAction(true);
                 }}
-                color="error"
+                sx={{ color: COLORS.error }}
               >
                 Reject
               </Button>
@@ -315,7 +454,7 @@ export default function UsersPage() {
                   setActionType('suspend');
                   setOpenAction(true);
                 }}
-                color="warning"
+                sx={{ color: COLORS.warning }}
               >
                 Suspend
               </Button>
@@ -324,22 +463,25 @@ export default function UsersPage() {
                   setActionType('ban');
                   setOpenAction(true);
                 }}
-                color="error"
+                sx={{ color: COLORS.error }}
               >
                 Ban
               </Button>
             </>
           )}
-          <Button onClick={() => setOpenDetail(false)}>Close</Button>
+          <Button onClick={() => setOpenDetail(false)} sx={{ color: COLORS.gray600 }}>
+            Close
+          </Button>
         </DialogActions>
       </Dialog>
 
       {/* Action Dialog */}
       <Dialog open={openAction} onClose={() => setOpenAction(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Confirm Action</DialogTitle>
-        <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            Are you sure you want to {actionType} this user?
+        <DialogTitle sx={{ fontWeight: 700, color: COLORS.gray900 }}>Confirm Action</DialogTitle>
+        <Divider />
+        <DialogContent sx={{ pt: 2 }}>
+          <Alert severity="warning" sx={{ mb: 2, borderRadius: '8px' }}>
+            Are you sure you want to <strong>{actionType}</strong> this user?
           </Alert>
           {(actionType === 'reject' || actionType === 'suspend' || actionType === 'ban') && (
             <TextField
