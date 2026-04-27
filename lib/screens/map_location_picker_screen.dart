@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 /// Map Location Picker Screen
 class MapLocationPickerScreen extends StatefulWidget {
@@ -20,9 +21,15 @@ class MapLocationPickerScreen extends StatefulWidget {
 
 class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
   late final TextEditingController _locationNameController;
+  GoogleMapController? _mapController;
   double? _latitude;
   double? _longitude;
   bool _isLoadingLocation = false;
+  Set<Marker> _markers = {};
+  bool _mapReady = false;
+  
+  static const defaultLatitude = -1.286389; // Nairobi center
+  static const defaultLongitude = 36.817223;
 
   @override
   void initState() {
@@ -38,6 +45,7 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
   @override
   void dispose() {
     _locationNameController.dispose();
+    _mapController?.dispose();
     super.dispose();
   }
 
@@ -46,7 +54,11 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         final result = await Geolocator.requestPermission();
-        if (result == LocationPermission.denied) return;
+        if (result == LocationPermission.denied) {
+          // Use default location if permission denied
+          _setDefaultLocation();
+          return;
+        }
       }
 
       setState(() => _isLoadingLocation = true);
@@ -60,14 +72,60 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
         _longitude = position.longitude;
         _isLoadingLocation = false;
       });
-    } catch (e) {
-      setState(() => _isLoadingLocation = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not get current location')),
-        );
+
+      // Move camera to current location AFTER map is ready
+      if (_mapReady) {
+        _moveCameraToLocation(_latitude!, _longitude!);
       }
+    } catch (e) {
+      print('Error getting location: $e');
+      setState(() => _isLoadingLocation = false);
+      _setDefaultLocation();
     }
+  }
+
+  void _setDefaultLocation() {
+    setState(() {
+      _latitude = defaultLatitude;
+      _longitude = defaultLongitude;
+      _isLoadingLocation = false;
+    });
+    if (_mapReady) {
+      _moveCameraToLocation(_latitude!, _longitude!);
+    }
+  }
+
+  void _moveCameraToLocation(double latitude, double longitude) {
+    if (_mapController == null) return;
+    _mapController!.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(latitude, longitude),
+          zoom: 15,
+        ),
+      ),
+    );
+    _addMarker(latitude, longitude);
+  }
+
+  void _addMarker(double latitude, double longitude) {
+    setState(() {
+      _markers = {
+        Marker(
+          markerId: const MarkerId('selected_location'),
+          position: LatLng(latitude, longitude),
+          infoWindow: const InfoWindow(
+            title: 'Selected Location',
+          ),
+        ),
+      };
+      _latitude = latitude;
+      _longitude = longitude;
+    });
+  }
+
+  void _onMapTap(LatLng position) {
+    _addMarker(position.latitude, position.longitude);
   }
 
   void _confirmLocation() {
@@ -91,69 +149,62 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
       appBar: AppBar(
         title: const Text('Select Location'),
         backgroundColor: Colors.blue,
+        elevation: 0,
       ),
       body: Column(
         children: [
-          // Map placeholder - uses geolocator data
+          // Google Map
           Expanded(
-            child: Container(
-              color: Colors.grey.shade200,
-              child: _isLoadingLocation
-                  ? const Center(child: CircularProgressIndicator())
-                  : _latitude != null && _longitude != null
-                      ? Stack(
-                          children: [
-                            // Map area (simplified - shows current position info)
-                            Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.location_on,
-                                    size: 80,
-                                    color: Colors.red,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'Current Location',
-                                    style: Theme.of(context).textTheme.titleLarge,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Latitude: ${_latitude?.toStringAsFixed(6)}',
-                                    style: TextStyle(color: Colors.grey.shade600),
-                                  ),
-                                  Text(
-                                    'Longitude: ${_longitude?.toStringAsFixed(6)}',
-                                    style: TextStyle(color: Colors.grey.shade600),
-                                  ),
-                                  const SizedBox(height: 24),
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.blue),
-                                    ),
-                                    child: const Text(
-                                      'In production, integrate with:\n• Google Maps API\n• Mapbox\n• Leaflet\n\nFor quick testing, enter location name below →',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        )
-                      : Center(
-                          child: Text(
-                            'Could not retrieve location',
-                            style: TextStyle(color: Colors.grey.shade600),
-                          ),
+            child: _isLoadingLocation
+                ? const Center(child: CircularProgressIndicator())
+                : _latitude != null && _longitude != null
+                    ? GoogleMap(
+                        onMapCreated: (controller) {
+                          _mapController = controller;
+                          setState(() => _mapReady = true);
+                          // Now that map is ready, animate to location
+                          _moveCameraToLocation(_latitude!, _longitude!);
+                        },
+                        initialCameraPosition: CameraPosition(
+                          target: LatLng(_latitude!, _longitude!),
+                          zoom: 15,
                         ),
-            ),
+                        markers: _markers,
+                        onTap: _onMapTap,
+                        myLocationEnabled: true,
+                        myLocationButtonEnabled: true,
+                        zoomControlsEnabled: true,
+                        mapType: MapType.normal,
+                      )
+                    : Center(
+                        child: Text(
+                          'Could not retrieve location',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                      ),
           ),
+          
+          // Location info card
+          if (_latitude != null && _longitude != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              color: Colors.blue.shade50,
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Latitude: ${_latitude?.toStringAsFixed(6)}, Longitude: ${_longitude?.toStringAsFixed(6)}\nTap map to place marker',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Location name input and confirmation
           Container(
             padding: const EdgeInsets.all(16),

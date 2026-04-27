@@ -103,6 +103,9 @@ flutter:
     - assets/Patient.jpg
     - assets/disabled children.jpg
     - assets/google.svg
+    - assets/home1.jpeg
+    - assets/home3.jpeg
+    - assets/home5.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

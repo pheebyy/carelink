@@ -66,5 +66,8 @@ u		<key>NSPhotoLibraryUsageDescription</key>
 		<string>CareLink needs access to your photo library so you can choose a profile picture.</string>
 		<key>NSCameraUsageDescription</key>
 		<string>CareLink needs camera access so you can take a profile picture.</string>
+		<!-- Google Maps API Key -->
+		<key>com.google.ios.maps.API_KEY</key>
+		<string>AIzaSyB4kE0dL85W3XO84WLCJgXYJbtHwWRo3z4</string>
 	</dict>
 </plist>

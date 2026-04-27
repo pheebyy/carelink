@@ -3,7 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../services/storage_service.dart';
 import '../services/firestore_service.dart';
-import '../utils/auth_provider.dart';
+import '../services/auth_service.dart';
 
 class CaregiverVerificationScreen extends StatefulWidget {
   const CaregiverVerificationScreen({super.key});
@@ -17,6 +17,7 @@ class _CaregiverVerificationScreenState
     extends State<CaregiverVerificationScreen> {
   final _storageService = StorageService();
   final _firestoreService = FirestoreService();
+  final _authService = AuthService();
   final _imagePicker = ImagePicker();
 
   // Form controllers
@@ -61,10 +62,10 @@ class _CaregiverVerificationScreenState
               break;
           }
         });
-        print('✅ Selected $documentType: ${pickedFile.name}');
+        print(' Selected $documentType: ${pickedFile.name}');
       }
     } catch (e) {
-      print('🔥 Error picking file: $e');
+      print(' Error picking file: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error picking file: $e')),
       );
@@ -104,7 +105,7 @@ class _CaregiverVerificationScreenState
     });
 
     try {
-      final user = AuthProvider.instance.currentUser;
+      final user = _authService.currentUser;
       if (user == null) {
         throw Exception('User not authenticated');
       }
@@ -185,7 +186,7 @@ class _CaregiverVerificationScreenState
         Navigator.pop(context);
       }
     } catch (e) {
-      print('🔥 Error submitting verification documents: $e');
+      print(' Error submitting verification documents: $e');
       setState(() {
         _errorMessage = 'Error: ${e.toString()}';
         _isSubmitting = false;
@@ -423,7 +424,7 @@ class _CaregiverVerificationScreenState
             ),
             const SizedBox(height: 12),
             Text(
-              '📋 Your documents will be verified against official Kenyan boards by our admin team.',
+              ' Your documents will be verified against official Kenyan boards by our admin team.',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.grey.shade600,
@@ -437,3 +438,4 @@ class _CaregiverVerificationScreenState
     );
   }
 }
+
