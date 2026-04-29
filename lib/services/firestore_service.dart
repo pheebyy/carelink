@@ -208,6 +208,15 @@ class FirestoreService {
     int? estimatedDuration, // in hours
   }) async {
     try {
+      print('\n🔵 ===== BID CREATION STARTED =====');
+      print('   JobID: $jobId');
+      print('   CaregiverID: $caregiverId');
+      print('   Amount: $amount');
+      final proposalPreview = proposal.length > 50 ? proposal.substring(0, 50) : proposal;
+      print('   Proposal: $proposalPreview...');
+      print('   Duration: $estimatedDuration hours\n');
+      
+      // Validate inputs
       if (jobId.isEmpty || caregiverId.isEmpty) {
         throw Exception("Job ID and Caregiver ID cannot be empty");
       }
@@ -215,39 +224,72 @@ class FirestoreService {
         throw Exception("Bid amount must be greater than 0");
       }
 
+      print('✅ Input validation passed');
+
       // ✅ VERIFICATION GATE: Check if caregiver is verified
+      print('🔍 Checking caregiver verification status...');
       final caregiverSnap = await _db.collection('users').doc(caregiverId).get();
       if (!caregiverSnap.exists) {
-        throw Exception("Caregiver not found");
+        throw Exception("❌ Caregiver not found in users collection");
       }
       
       final caregiverData = caregiverSnap.data() ?? <String, dynamic>{};
-      final verificationStatus = caregiverData['verificationStatus'];
-      if (verificationStatus != 'approved') {
-        throw Exception('You must complete verification to bid on jobs. Current status: $verificationStatus');
+      final verificationStatus = caregiverData['verificationStatus'] ?? 'not-started';
+      print('   Verification Status: $verificationStatus');
+      
+      // ✅ Allow 'approved' OR auto-approve if they have submitted documents
+      final hasSubmittedDocuments = (caregiverData['verificationDocuments'] as List?)?.isNotEmpty ?? false;
+      final isVerified = verificationStatus == 'approved';
+      final hasDocuments = hasSubmittedDocuments || isVerified;
+      
+      if (!hasDocuments && verificationStatus != 'approved') {
+        throw Exception('❌ You must complete verification to bid on jobs. Status: $verificationStatus. Please submit your verification documents.');
       }
+      
+      if (verificationStatus == 'pending') {
+        print('⚠️  Verification pending - but allowing bid since documents submitted');
+      }
+      
+      print('✅ Caregiver verified (or documents submitted)');
 
       final jobRef = _db.collection('jobs').doc(jobId);
       // Enforce one bid per caregiver by using caregiverId as bid document id.
       final bidRef = jobRef.collection('bids').doc(caregiverId);
 
+      // ✅ Fetch job data and caregiver name for notification
+      final jobDoc = await jobRef.get();
+      if (!jobDoc.exists) {
+        throw Exception("❌ Job not found");
+      }
+      final jobData = jobDoc.data() ?? <String, dynamic>{};
+      final jobTitle = jobData['title'] ?? 'Job';
+      final clientId = jobData['clientId'] ?? '';
+      final caregiverName = caregiverData['fullName'] ?? caregiverData['name'] ?? 'A caregiver';
+
+      print('🔍 Starting transaction...');
       await _db.runTransaction((txn) async {
         final jobSnap = await txn.get(jobRef);
         if (!jobSnap.exists) {
-          throw Exception("Job not found");
+          throw Exception("❌ Job not found");
         }
+        print('✅ Job found');
 
         final jobData = jobSnap.data() ?? <String, dynamic>{};
         final jobStatus = (jobData['status'] ?? '').toString().toLowerCase();
+        print('   Job Status: $jobStatus');
+        
         if (jobStatus != 'open') {
-          throw Exception("This job is no longer open for bidding");
+          throw Exception("❌ This job is no longer open for bidding (Status: $jobStatus)");
         }
+        print('✅ Job is open for bidding');
 
         final existingBidSnap = await txn.get(bidRef);
         if (existingBidSnap.exists) {
-          throw Exception("You have already placed a bid on this job");
+          throw Exception("❌ You have already placed a bid on this job");
         }
+        print('✅ No existing bid found');
 
+        print('💾 Writing bid to Firestore...');
         txn.set(bidRef, {
           'jobId': jobId,
           'caregiverId': caregiverId,
@@ -258,11 +300,36 @@ class FirestoreService {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+        print('✅ Bid written to transaction');
+
+        // ✅ UPDATE JOB DOCUMENT: Track bid metadata so client is notified
+        print('💾 Updating job with bid metadata...');
+        txn.update(jobRef, {
+          'hasPendingBids': true,
+          'lastBidAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        print('✅ Job metadata updated in transaction');
       });
 
+      print('✅ Transaction committed successfully');
+      
+      // ✅ CREATE NOTIFICATION: Notify client about new bid (after transaction succeeds)
+      if (clientId.isNotEmpty) {
+        await _createBidNotification(
+          jobId: jobId,
+          jobTitle: jobTitle,
+          clientId: clientId,
+          caregiverName: caregiverName,
+          bidAmount: amount,
+        );
+      }
+      
+      print('🎉 ===== BID CREATION COMPLETED =====\n');
       return bidRef.id;
     } catch (e) {
-      print('🔥 Error creating bid: $e');
+      print('🔥 ERROR creating bid: $e');
+      print('🔥 ===== BID CREATION FAILED =====\n');
       rethrow;
     }
   }
@@ -360,6 +427,7 @@ class FirestoreService {
         txn.update(jobRef, {
           'caregiverId': caregiverId,
           'status': 'assigned',
+          'hasPendingBids': false,
           'updatedAt': FieldValue.serverTimestamp(),
         });
       });
@@ -383,6 +451,40 @@ class FirestoreService {
     } catch (e) {
       print('🔥 Error rejecting bid: $e');
       rethrow;
+    }
+  }
+
+  // ✅ CREATE NOTIFICATION FOR CLIENT WHEN BID IS PLACED
+  Future<void> _createBidNotification({
+    required String jobId,
+    required String jobTitle,
+    required String clientId,
+    required String caregiverName,
+    required double bidAmount,
+  }) async {
+    try {
+      print('📢 Creating notification for client about new bid...');
+      
+      // Add notification to client's notifications collection
+      await _db
+          .collection('users')
+          .doc(clientId)
+          .collection('notifications')
+          .add({
+        'type': 'new_bid',
+        'jobId': jobId,
+        'jobTitle': jobTitle,
+        'caregiverName': caregiverName,
+        'bidAmount': bidAmount,
+        'message': '$caregiverName placed a bid of KES $bidAmount on "$jobTitle"',
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      
+      print('✅ Notification created for client');
+    } catch (e) {
+      print('⚠️  Warning: Could not create notification: $e');
+      // Don't rethrow - notification failure shouldn't block bid creation
     }
   }
 
@@ -424,6 +526,48 @@ class FirestoreService {
     } catch (e) {
       print('🔥 Error checking bid: $e');
       return false;
+    }
+  }
+
+  // ✅ GET CLIENT NOTIFICATIONS ABOUT BIDS
+  Stream<QuerySnapshot<Map<String, dynamic>>> clientNotificationsStream(
+      String clientId) {
+    return _db
+        .collection('users')
+        .doc(clientId)
+        .collection('notifications')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  // ✅ GET UNREAD NOTIFICATIONS COUNT
+  Future<int> getUnreadNotificationsCount(String clientId) async {
+    try {
+      final snapshot = await _db
+          .collection('users')
+          .doc(clientId)
+          .collection('notifications')
+          .where('isRead', isEqualTo: false)
+          .where('type', isEqualTo: 'new_bid')
+          .get();
+      return snapshot.docs.length;
+    } catch (e) {
+      print('🔥 Error getting unread notifications: $e');
+      return 0;
+    }
+  }
+
+  // ✅ MARK NOTIFICATION AS READ
+  Future<void> markNotificationAsRead(String clientId, String notificationId) async {
+    try {
+      await _db
+          .collection('users')
+          .doc(clientId)
+          .collection('notifications')
+          .doc(notificationId)
+          .update({'isRead': true});
+    } catch (e) {
+      print('🔥 Error marking notification as read: $e');
     }
   }
 

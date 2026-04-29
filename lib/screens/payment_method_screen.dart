@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/paystack_service.dart';
-import 'card_payment_screen.dart';
-
 import 'saved_cards_screen.dart';
 
 /// Modern payment method selection screen
@@ -27,7 +25,6 @@ class PaymentMethodScreen extends StatefulWidget {
 class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
   final _paystackService = PaystackService();
   List<Map<String, dynamic>> _savedCards = [];
-  String? _userEmail;
   bool _isLoadingCards = true;
 
   @override
@@ -37,20 +34,8 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
   }
 
   Future<void> _initializePayment() async {
-    // Get user email
-    final user = FirebaseAuth.instance.currentUser;
-    final resolvedEmail = widget.email ?? user?.email;
-
-    // Some auth providers do not expose email; use a deterministic fallback.
-    final safeEmail = (resolvedEmail != null && resolvedEmail.trim().isNotEmpty)
-        ? resolvedEmail.trim()
-        : '${user?.uid ?? 'guest'}@carelink.app';
-
-    setState(() {
-      _userEmail = safeEmail;
-    });
-
     // Load saved cards
+    final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       await _loadSavedCards(user.uid);
     } else {
@@ -174,23 +159,6 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
                 ),
                 const SizedBox(height: 16),
 
-
-                const SizedBox(height: 12),
-
-                // Card Payment Option
-                _buildPaymentMethodCard(
-                  icon: Icons.credit_card,
-                  iconColor: Colors.blue,
-                  title: 'Debit/Credit Card',
-                  subtitle: 'Visa, Mastercard, Verve',
-                  helperText: 'Secure Paystack checkout opens in-app. No card data stored on this device.',
-                  statusLabel: _savedCards.isEmpty ? null : 'Save tokens',
-                  statusColor: Colors.blue,
-                  onTap: () => _navigateToCardPayment(),
-                ),
-
-                const SizedBox(height: 12),
-
                 // Bank Transfer Option
                 _buildPaymentMethodCard(
                   icon: Icons.account_balance,
@@ -278,14 +246,8 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Save a card the next time you pay with card to enable one-tap payments.',
+            'Add a card during checkout to enable faster future payments.',
             style: TextStyle(fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _navigateToCardPayment,
-            icon: const Icon(Icons.credit_card),
-            label: const Text('Pay with new card'),
           ),
         ],
       ),
@@ -459,24 +421,6 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
   }
 
 
-
-  void _navigateToCardPayment() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CardPaymentScreen(
-          amount: widget.amount,
-          email: _userEmail ?? '',
-          paymentType: widget.paymentType,
-          metadata: widget.metadata,
-        ),
-      ),
-    ).then((result) {
-      if (result == true && mounted) {
-        Navigator.pop(context, true);
-      }
-    });
-  }
 
   void _navigateToSavedCards() {
     final user = FirebaseAuth.instance.currentUser;

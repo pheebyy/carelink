@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
-import 'screens/login_screen.dart';
-import 'screens/payment_example_screen.dart';
+import 'app_router.dart';
 import 'services/notification_service.dart';
 import 'services/paystack_service.dart';
 
@@ -60,32 +60,9 @@ Future<void> main() async {
   } catch (e) {
     print(' Initialization error: $e');
   }
-  runApp(const CareLinkApp());
-}
-
-class CareLinkApp extends StatelessWidget {
-  const CareLinkApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'CareLink',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.green,
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.green,
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-      ),
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const LoginScreen(),
-        '/login': (context) => const LoginScreen(),
-        '/payment-demo': (context) => const PaymentExampleScreen(),
-      },
-    );
-  }
+  runApp(
+    const ProviderScope(
+      child: CarelinkApp(),
+    ),
+  );
 }

@@ -93,6 +93,21 @@ service cloud.firestore {
       match /carePlans/{carePlanId} {
         allow read, create, update, delete: if isUser(uid) || isAdmin();
       }
+
+      // ========================= NOTIFICATIONS SUBCOLLECTION (NEW) =========================
+      match /notifications/{notificationId} {
+        // User can read their own notifications
+        allow read: if isUser(uid);
+        
+        // System can create notifications (via Cloud Function)
+        allow create: if isAuthenticated();
+        
+        // User can update their own notification (mark as read)
+        allow update: if isUser(uid);
+        
+        // User can delete their own notification
+        allow delete: if isUser(uid);
+      }
     }
 
     // ========================= JOBS COLLECTION =========================

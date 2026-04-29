@@ -69,6 +69,7 @@ gradle-wrapper.jar
 /local.properties
 GeneratedPluginRegistrant.java
 .cxx/
+android/.gradle/
 
 # Android build artifacts
 /android/app/debug

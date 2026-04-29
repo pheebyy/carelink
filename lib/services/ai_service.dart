@@ -77,12 +77,17 @@ Available Features to mention:
       if (e.message.contains('API_KEY_INVALID')) {
         return 'Invalid API key. Please check your configuration.';
       } else if (e.message.contains('RESOURCE_EXHAUSTED')) {
-        return 'I\'m currently busy. Please try again in a moment.';
+        print('⚠️ Google Generative AI quota exhausted. The free tier limit has been reached.');
+        return 'I\'m currently unavailable due to high usage. This is temporary. Please try again in a few minutes or contact support.';
+      } else if (e.message.contains('PERMISSION_DENIED') || e.message.contains('403')) {
+        print('⚠️ Google Generative AI permission denied. Check API key and billing.');
+        return 'I don\'t have permission to respond. Please check your API configuration or enable billing.';
       }
       return 'I encountered an error: ${e.message}. Please try again.';
     } catch (e) {
       print(' AI Chat Error: $e');
-      return 'Sorry, I encountered an unexpected error. Please try again or contact support.';
+      // For any other error, return a user-friendly message and continue app
+      return 'Sorry, I encountered an unexpected error. I\'m still here if you want to try again!';
     }
   }
 

@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
-import 'screens/role_loader_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/role_shell.dart';
 import 'screens/onboarding_screen.dart';
@@ -63,9 +62,8 @@ class CarelinkApp extends ConsumerWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Carelink',
-      initialRoute: '/loading',
+      initialRoute: '/login',
       routes: {
-        '/loading': (context) => const RoleLoaderScreen(),
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignupScreen(),
         '/forgot': (context) => const ForgotPasswordScreen(),

@@ -63,23 +63,16 @@ class _LoginScreenState extends State<LoginScreen> {
   // Checks Firebase for an existing, verified session.
   Future<void> _checkIfUserLoggedIn() async {
     try {
-      final currentUser = _auth.currentUser;
-
-      if (currentUser != null) {
-        // Reload to get the freshest email-verification status from Firebase.
-        await currentUser.reload();
-        final refreshedUser = _auth.currentUser;
-
-        if (refreshedUser != null && refreshedUser.emailVerified) {
-          // A valid, verified session exists — redirect immediately.
-          // We intentionally do NOT flip _isCheckingSession here because the
-          // widget is about to be replaced by a dashboard screen.
-          await _routePostLogin(refreshedUser);
-          return; // Exit early; setState below must not run after navigation.
-        }
-      }
-    } catch (_) {
-      // Network or Firebase error — fall through and show the login form.
+      // Add timeout to prevent infinite waiting
+      await _performSessionCheck().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          print('⏱️ Session check timeout - showing login form');
+        },
+      );
+    } catch (e) {
+      print('❌ Session check error: $e');
+      // Fall through to show login form
     }
 
     // No active session (or unverified) — reveal the login form.
@@ -90,7 +83,33 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _performSessionCheck() async {
+    final currentUser = _auth.currentUser;
+
+    if (currentUser != null) {
+      // Reload to get the freshest email-verification status from Firebase.
+      await currentUser.reload();
+      final refreshedUser = _auth.currentUser;
+
+      if (refreshedUser != null && refreshedUser.emailVerified) {
+        // A valid, verified session exists — redirect immediately.
+        // We intentionally do NOT flip _isCheckingSession here because the
+        // widget is about to be replaced by a dashboard screen.
+        await _routePostLogin(refreshedUser);
+        return; // Exit early; setState below must not run after navigation.
+      }
+    }
+  }
+
   String _friendlyAuthError(FirebaseAuthException e) {
+    final message = e.message ?? '';
+    print('🔴 Firebase Auth Error - Code: ${e.code}, Message: $message');
+    
+    // Check for quota/resource exhausted errors
+    if (message.contains('quota') || message.contains('resource') || message.contains('exhausted')) {
+      return "Service temporarily unavailable. Please try again in a few minutes.";
+    }
+    
     switch (e.code) {
       case 'invalid-email':
         return "The email address format is invalid. Please check and try again.";
@@ -109,7 +128,11 @@ class _LoginScreenState extends State<LoginScreen> {
       case 'invalid-credential':
         return "Invalid email or password. Please try again.";
       default:
-        return "Login failed: ${e.message ?? 'Unknown error'}. Please try again.";
+        // Check for network-related errors in the message
+        if (message.contains('connection') || message.contains('I/O error') || message.contains('reset by peer')) {
+          return "Unable to connect to the server. Please check your internet connection and try again.";
+        }
+        return "Login failed: $message. Please try again.";
     }
   }
 
@@ -241,6 +264,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       // Fetch user document from Firestore
+      print('📋 Fetching user document for UID: ${user.uid}');
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -252,23 +276,31 @@ class _LoginScreenState extends State<LoginScreen> {
       final role = data['role'] as String?;
       final gpsTrackingEnabled = data['gpsTrackingEnabled'] == true;
 
+      print('👤 User role: $role, GPS enabled: $gpsTrackingEnabled');
+
       if (gpsTrackingEnabled) {
+        print('🗺️ Starting GPS tracking...');
         await LocationTrackingService.instance.startTracking(user.uid);
       }
 
       // Navigate according to role
       if (role == 'caregiver') {
+        print('🚀 Navigating to Caregiver Dashboard');
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => CaregiverDashboard()),
         );
       } else if (role == 'client') {
+        print('🚀 Navigating to Client Dashboard');
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => ClientDashboard()),
         );
       } else {
         // Role not set, show error
+        print('⚠️ User role is not set in Firestore');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -278,16 +310,18 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } catch (e) {
+      print('❌ Login error in _routePostLogin: $e');
+      print('📱 Exception type: ${e.runtimeType}');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
             content:
-                Text('Unable to continue right now. Please try again.')),
+                Text('Error: $e')),
       );
     }
   }
 
-  // Improved login logic with account lockout
+  // Improved login logic with minimal retry (only for transient network errors)
   Future<void> _loginUser() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -306,7 +340,8 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // Attempt login
+      // Attempt login - NO RETRIES on resource exhausted errors
+      print('🔐 Login attempt for $email');
       final cred = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
@@ -318,8 +353,11 @@ class _LoginScreenState extends State<LoginScreen> {
         await _routePostLogin(cred.user!);
       }
     } on FirebaseAuthException catch (e) {
-      // Record failed attempt
-      _recordFailedAttempt();
+      // Don't record failed attempts on resource/quota errors
+      final message = e.message ?? '';
+      if (!message.contains('resource') && !message.contains('quota') && !message.contains('exhausted')) {
+        _recordFailedAttempt();
+      }
 
       setState(() {
         _errorMessage = _friendlyAuthError(e);
@@ -330,9 +368,14 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       });
     } catch (e) {
+      print('❌ Unexpected login error: $e');
       setState(() {
-        _errorMessage =
-            'Something went wrong while signing in. Please try again.';
+        final errorStr = e.toString();
+        if (errorStr.contains('connection') || errorStr.contains('I/O error') || errorStr.contains('reset by peer')) {
+          _errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
+        } else {
+          _errorMessage = 'Something went wrong while signing in. Please try again.';
+        }
       });
     } finally {
       if (mounted) {
