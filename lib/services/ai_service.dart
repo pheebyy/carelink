@@ -77,10 +77,10 @@ Available Features to mention:
       if (e.message.contains('API_KEY_INVALID')) {
         return 'Invalid API key. Please check your configuration.';
       } else if (e.message.contains('RESOURCE_EXHAUSTED')) {
-        print('⚠️ Google Generative AI quota exhausted. The free tier limit has been reached.');
+        print(' Google Generative AI quota exhausted. The free tier limit has been reached.');
         return 'I\'m currently unavailable due to high usage. This is temporary. Please try again in a few minutes or contact support.';
       } else if (e.message.contains('PERMISSION_DENIED') || e.message.contains('403')) {
-        print('⚠️ Google Generative AI permission denied. Check API key and billing.');
+        print(' Google Generative AI permission denied. Check API key and billing.');
         return 'I don\'t have permission to respond. Please check your API configuration or enable billing.';
       }
       return 'I encountered an error: ${e.message}. Please try again.';
