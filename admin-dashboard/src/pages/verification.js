@@ -27,8 +27,20 @@ import {
   Chip,
 } from '@mui/material';
 import { db } from '../lib/firebase';
-import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  deleteField,
+  getDocs,
+  serverTimestamp,
+  updateDoc,
+  doc,
+} from 'firebase/firestore';
 import { useAdmin } from '../context/AdminContext';
+import { showSuccess, showError } from '../lib/toast';
+
+const isPendingVerification = (status) =>
+  !status || status === 'pending' || status === 'pending_verification';
 
 function a11yProps(index) {
   return {
@@ -53,7 +65,8 @@ function TabPanel(props) {
 }
 
 export default function VerificationPage() {
-  const { adminRole } = useAdmin();
+  const { user, canPerform } = useAdmin();
+  const canVerifyCaregiver = canPerform('verifyCaregiver');
   const [tabValue, setTabValue] = useState(0);
   const [caregivers, setCaregivers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -67,8 +80,9 @@ export default function VerificationPage() {
   const [showImageModal, setShowImageModal] = useState(false);
 
   useEffect(() => {
-    if (adminRole !== 'superadmin') {
-      console.error('Only superadmins can access verification');
+    if (!canVerifyCaregiver) {
+      console.error('Admin does not have caregiver verification permission');
+      setLoading(false);
       return;
     }
 
@@ -91,7 +105,7 @@ export default function VerificationPage() {
     };
 
     fetchCaregivers();
-  }, [adminRole]);
+  }, [canVerifyCaregiver]);
 
   const handleVerifyDocument = (documentType, verifiedAgainst) => {
     setDocumentVerifications((prev) => ({
@@ -121,7 +135,7 @@ export default function VerificationPage() {
     );
 
     if (!hasAllVerifications) {
-      alert('Please verify all documents before approving');
+      showError('Please verify all documents before approving');
       return;
     }
 
@@ -142,9 +156,20 @@ export default function VerificationPage() {
       await updateDoc(caregiverRef, {
         verificationDocuments: updatedDocuments,
         verificationStatus: 'approved',
-        verificationApprovedAt: new Date(),
-        verificationApprovedBy: 'admin_uid', // TODO: Get actual admin UID from context
-        updatedAt: new Date(),
+        verificationApprovedAt: serverTimestamp(),
+        verificationApprovedBy: user?.uid || null,
+        overallVerificationNotes: '',
+        updatedAt: serverTimestamp(),
+      });
+
+      await addDoc(collection(db, 'auditLogs'), {
+        adminId: user?.uid || 'unknown',
+        action: 'approve_caregiver_verification',
+        details: {
+          caregiverId: selectedCaregiver.id,
+          caregiverEmail: selectedCaregiver.email || '',
+        },
+        timestamp: serverTimestamp(),
       });
 
       setCaregivers(
@@ -154,6 +179,8 @@ export default function VerificationPage() {
                 ...c,
                 verificationDocuments: updatedDocuments,
                 verificationStatus: 'approved',
+                verificationApprovedBy: user?.uid || null,
+                overallVerificationNotes: '',
               }
             : c
         )
@@ -161,16 +188,16 @@ export default function VerificationPage() {
 
       setOpenVerifyDialog(false);
       setSelectedCaregiver(null);
-      alert('Caregiver approved successfully!');
+      showSuccess('Caregiver approved successfully!');
     } catch (error) {
       console.error('Error approving caregiver:', error);
-      alert('Error: ' + error.message);
+      showError('Error: ' + error.message);
     }
   };
 
   const handleReject = async () => {
     if (!selectedCaregiver || !rejectionNotes.trim()) {
-      alert('Please provide rejection notes');
+      showError('Please provide rejection notes');
       return;
     }
 
@@ -179,6 +206,9 @@ export default function VerificationPage() {
         (doc) => ({
           ...doc,
           status: 'rejected',
+          verificationNotes: rejectionNotes,
+          verificationDate: new Date().toISOString(),
+          verificationMethod: 'admin_review',
         })
       );
 
@@ -187,7 +217,20 @@ export default function VerificationPage() {
         verificationDocuments: updatedDocuments,
         verificationStatus: 'rejected',
         overallVerificationNotes: rejectionNotes,
-        updatedAt: new Date(),
+        verificationApprovedAt: deleteField(),
+        verificationApprovedBy: deleteField(),
+        updatedAt: serverTimestamp(),
+      });
+
+      await addDoc(collection(db, 'auditLogs'), {
+        adminId: user?.uid || 'unknown',
+        action: 'reject_caregiver_verification',
+        details: {
+          caregiverId: selectedCaregiver.id,
+          caregiverEmail: selectedCaregiver.email || '',
+          reason: rejectionNotes,
+        },
+        timestamp: serverTimestamp(),
       });
 
       setCaregivers(
@@ -197,6 +240,7 @@ export default function VerificationPage() {
                 ...c,
                 verificationDocuments: updatedDocuments,
                 verificationStatus: 'rejected',
+                overallVerificationNotes: rejectionNotes,
               }
             : c
         )
@@ -206,19 +250,17 @@ export default function VerificationPage() {
       setOpenVerifyDialog(false);
       setSelectedCaregiver(null);
       setRejectionNotes('');
-      alert('Caregiver rejected successfully!');
+      showSuccess('Caregiver rejected successfully!');
     } catch (error) {
       console.error('Error rejecting caregiver:', error);
-      alert('Error: ' + error.message);
+      showError('Error: ' + error.message);
     }
   };
 
   const getFilteredCaregivers = () => {
     switch (tabValue) {
       case 0: // Pending
-        return caregivers.filter(
-          (c) => c.verificationStatus === 'pending' || !c.verificationStatus
-        );
+        return caregivers.filter((c) => isPendingVerification(c.verificationStatus));
       case 1: // Approved
         return caregivers.filter((c) => c.verificationStatus === 'approved');
       case 2: // Rejected
@@ -230,7 +272,7 @@ export default function VerificationPage() {
 
   const filteredCaregivers = getFilteredCaregivers();
 
-  if (adminRole !== 'superadmin') {
+  if (!canVerifyCaregiver) {
     return (
       <Box>
         <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 3 }}>
@@ -239,7 +281,7 @@ export default function VerificationPage() {
         <Card>
           <CardContent>
             <Typography color="error">
-              🔒 Only super admins can access this page
+              You do not have permission to verify caregivers.
             </Typography>
           </CardContent>
         </Card>
@@ -270,7 +312,7 @@ export default function VerificationPage() {
             sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}
           >
             <Tab
-              label={`Pending (${caregivers.filter((c) => c.verificationStatus === 'pending' || !c.verificationStatus).length})`}
+              label={`Pending (${caregivers.filter((c) => isPendingVerification(c.verificationStatus)).length})`}
               {...a11yProps(0)}
             />
             <Tab

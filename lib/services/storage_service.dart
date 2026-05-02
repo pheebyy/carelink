@@ -40,24 +40,59 @@ class StorageService {
     String contentType = 'image/jpeg',
   }) async {
     try {
+      print('📤 Starting verification document upload for: $documentType');
+      
+      if (bytes.isEmpty) {
+        throw Exception('File is empty - unable to upload');
+      }
+      
+      final fileSizeMB = bytes.length / (1024 * 1024);
+      print('📊 File size: ${fileSizeMB.toStringAsFixed(2)} MB');
+      
       if (bytes.length > 5 * 1024 * 1024) {
-        throw Exception('File size exceeds 5MB limit');
+        throw Exception('File size exceeds 5MB limit (current: ${fileSizeMB.toStringAsFixed(2)} MB)');
       }
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = '${documentType}_$timestamp.$fileExtension';
-      final ref = _storage.ref().child('users/$uid/verification/$fileName');
+      final storagePath = 'users/$uid/verification/$fileName';
+      final ref = _storage.ref().child(storagePath);
       final metadata = SettableMetadata(contentType: contentType);
+
+      print('📁 Uploading to path: $storagePath');
+      print('🔐 User UID: $uid');
+      print('📝 Content Type: $contentType');
 
       final snap = await ref.putData(Uint8List.fromList(bytes), metadata);
       final url = await snap.ref.getDownloadURL();
 
+      print('✅ Upload successful! Download URL: $url');
       return {
         'storageUrl': url,
         'fileName': fileName,
       };
     } on FirebaseException catch (e) {
-      throw Exception('Verification document upload failed (${e.code}): ${e.message ?? 'Unknown error'}');
+      print('🔴 Firebase error - Code: ${e.code}, Message: ${e.message}');
+      String userMessage = '';
+      
+      switch (e.code) {
+        case 'permission-denied':
+          userMessage = 'Permission denied. Please ensure you are signed in and try again.';
+          break;
+        case 'quota-exceeded':
+          userMessage = 'Storage quota exceeded. Please contact support.';
+          break;
+        case 'invalid-argument':
+          userMessage = 'Invalid file format or metadata.';
+          break;
+        default:
+          userMessage = e.message ?? 'Upload failed - please try again';
+      }
+      
+      throw Exception('Upload failed: $userMessage');
+    } catch (e) {
+      print('🔴 General error: $e');
+      throw Exception('Unexpected error during upload: ${e.toString()}');
     }
   }
 }

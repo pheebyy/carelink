@@ -39,9 +39,10 @@ const DRAWER_WIDTH = 280;
 const menuItems = [
   { label: 'Dashboard', href: '/dashboard', icon: DashboardIcon, permission: null },
   { label: 'Users', href: '/users', icon: PeopleIcon, permission: 'manageUsers' },
-  { label: 'Verification', href: '/verification', icon: VerifiedUserIcon, permission: 'manageUsers' },
+  { label: 'Verification', href: '/verification', icon: VerifiedUserIcon, permission: 'verifyCaregiver' },
   { label: 'Jobs', href: '/jobs', icon: WorkIcon, permission: 'moderateJobs' },
   { label: 'Payments', href: '/payments', icon: PaymentIcon, permission: 'approvePayouts' },
+  { label: 'Refunds', href: '/refunds', icon: PaymentIcon, permission: 'approvePayouts' },
   { label: 'Disputes', href: '/disputes', icon: PendingActionsIcon, permission: 'manageDisputes' },
   { label: 'Audit Logs', href: '/audit-logs', icon: HistoryIcon, permission: 'viewAuditLog' },
   { label: 'Settings', href: '/settings', icon: SettingsIcon, permission: 'manageSiteSettings' },

@@ -7,26 +7,21 @@ import {
   Typography,
   Button,
   LinearProgress,
-  Divider,
+  Alert,
 } from '@mui/material';
 import { db } from '../lib/firebase';
 import {
   collection,
   query,
-  where,
-  getDocs,
-  collectionGroup,
+  onSnapshot,
   orderBy,
   limit,
 } from 'firebase/firestore';
 import { StatCard } from '../components/StatCard';
 import { DataTable } from '../components/DataTable';
-import { StatusBadge } from '../components/StatusBadge';
 import {
-  TrendingUp as TrendingUpIcon,
   People as PeopleIcon,
   Work as WorkIcon,
-  Payment as PaymentIcon,
   CheckCircle as CheckCircleIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
@@ -48,12 +43,28 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
+const isPendingVerification = (status) =>
+  !status || status === 'pending' || status === 'pending_verification';
+
+const isOpenDispute = (status) =>
+  !status || ['pending', 'open', 'submitted', 'investigating', 'awaiting_user'].includes(status);
+
+const isActiveRefund = (status) =>
+  ['pending', 'processing'].includes(status);
+
+const safePercent = (value, total) => {
+  if (!total) return 0;
+  return Math.min(100, Math.max(0, (value / total) * 100));
+};
+
 export default function Dashboard() {
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalJobs: 0,
     totalRevenue: 0,
     pendingApprovals: 0,
+    openDisputes: 0,
+    pendingRefunds: 0,
     completedJobs: 0,
     activeJobs: 0,
   });
@@ -64,104 +75,171 @@ export default function Dashboard() {
     distribution: [],
     paymentStatus: [],
   });
+  const [dashboardError, setDashboardError] = useState('');
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        // Fetch users count
-        const usersSnapshot = await getDocs(collection(db, 'users'));
-        const totalUsers = usersSnapshot.size;
-        const pendingApprovalsCount = usersSnapshot.docs.filter(
-          (doc) => doc.data().verificationStatus === 'pending_verification'
+    // Set up real-time listeners for dashboard data
+    const unsubscribers = [];
+    const handleSnapshotError = (label) => (error) => {
+      console.error(`Dashboard ${label} listener error:`, error);
+      setDashboardError(
+        `Some dashboard data could not be loaded (${label}). Check admin Firestore permissions.`
+      );
+      setLoading(false);
+    };
+
+    // Subscribe to users collection
+    const usersUnsub = onSnapshot(
+      collection(db, 'users'),
+      (snapshot) => {
+        const totalUsers = snapshot.size;
+        const pendingApprovalsCount = snapshot.docs.filter(
+          (doc) => isPendingVerification(doc.data().verificationStatus)
         ).length;
 
-        // Fetch jobs count and details
-        const jobsSnapshot = await getDocs(collection(db, 'jobs'));
-        const totalJobs = jobsSnapshot.size;
-        const activeJobs = jobsSnapshot.docs.filter(
+        setStats((prevStats) => ({
+          ...prevStats,
+          totalUsers,
+          pendingApprovals: pendingApprovalsCount,
+        }));
+      },
+      handleSnapshotError('users')
+    );
+    unsubscribers.push(usersUnsub);
+
+    // Subscribe to jobs collection
+    const jobsUnsub = onSnapshot(
+      collection(db, 'jobs'),
+      (snapshot) => {
+        const totalJobs = snapshot.size;
+        const activeJobs = snapshot.docs.filter(
           (doc) => doc.data().status === 'active'
         ).length;
-        const completedJobs = jobsSnapshot.docs.filter(
+        const completedJobs = snapshot.docs.filter(
           (doc) => doc.data().status === 'completed'
         ).length;
 
-        // Fetch payments and calculate revenue
-        const paymentsSnapshot = await getDocs(
-          query(collection(db, 'payments'), where('status', '==', 'completed'))
-        );
-        const totalRevenue = paymentsSnapshot.docs.reduce(
-          (sum, doc) => sum + (doc.data().amount || 0),
-          0
-        );
+        setStats((prevStats) => ({
+          ...prevStats,
+          totalJobs,
+          activeJobs,
+          completedJobs,
+        }));
 
-        // Payment status distribution
-        const paymentStatusSnapshot = await getDocs(collection(db, 'payments'));
+        // Update chart distribution
+        setChartData((prevData) => ({
+          ...prevData,
+          distribution: [
+            { name: 'Active', value: activeJobs, fill: COLORS.success },
+            { name: 'Completed', value: completedJobs, fill: COLORS.info },
+            { name: 'Pending', value: Math.max(0, totalJobs - activeJobs - completedJobs), fill: COLORS.pending },
+          ],
+        }));
+      },
+      handleSnapshotError('jobs')
+    );
+    unsubscribers.push(jobsUnsub);
+
+    // Subscribe to transactions collection used by the Flutter payment flow.
+    const transactionsUnsub = onSnapshot(
+      collection(db, 'transactions'),
+      (snapshot) => {
+        const totalRevenue = snapshot.docs
+          .filter((doc) => doc.data().status === 'completed')
+          .reduce((sum, doc) => {
+            const data = doc.data();
+            return sum + (data.platformFee || data.amount || 0);
+          }, 0);
+
         const paymentCounts = {
           completed: 0,
           pending: 0,
           failed: 0,
+          refunded: 0,
         };
-        paymentStatusSnapshot.docs.forEach((doc) => {
+
+        snapshot.docs.forEach((doc) => {
           const status = doc.data().status;
-          if (paymentCounts.hasOwnProperty(status)) {
+          if (Object.prototype.hasOwnProperty.call(paymentCounts, status)) {
             paymentCounts[status]++;
           }
         });
 
-        // Fetch recent audit logs
-        const auditSnapshot = await getDocs(
-          query(
-            collection(db, 'auditLogs'),
-            orderBy('timestamp', 'desc'),
-            limit(10)
-          )
-        );
-        const activity = auditSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
+        setStats((prevStats) => ({
+          ...prevStats,
+          totalRevenue,
         }));
 
-        // Generate mock timeline data (in production, aggregate from Firestore)
-        const timelineData = [
-          { day: 'Mon', users: 45, jobs: 12, revenue: 2400 },
-          { day: 'Tue', users: 52, jobs: 15, revenue: 2800 },
-          { day: 'Wed', users: 48, jobs: 14, revenue: 2200 },
-          { day: 'Thu', users: 61, jobs: 18, revenue: 2900 },
-          { day: 'Fri', users: 55, jobs: 16, revenue: 2500 },
-          { day: 'Sat', users: 67, jobs: 22, revenue: 3200 },
-          { day: 'Sun', users: 58, jobs: 19, revenue: 2800 },
-        ];
-
-        setStats({
-          totalUsers,
-          totalJobs,
-          totalRevenue,
-          pendingApprovals: pendingApprovalsCount,
-          completedJobs,
-          activeJobs,
-        });
-        setRecentActivity(activity);
-        setChartData({
-          timeline: timelineData,
-          distribution: [
-            { name: 'Active', value: activeJobs, fill: COLORS.success },
-            { name: 'Completed', value: completedJobs, fill: COLORS.info },
-            { name: 'Pending', value: totalJobs - activeJobs - completedJobs, fill: COLORS.pending },
-          ],
+        setChartData((prevData) => ({
+          ...prevData,
           paymentStatus: [
             { name: 'Completed', value: paymentCounts.completed, fill: COLORS.success },
             { name: 'Pending', value: paymentCounts.pending, fill: COLORS.pending },
             { name: 'Failed', value: paymentCounts.failed, fill: COLORS.error },
+            { name: 'Refunded', value: paymentCounts.refunded, fill: COLORS.info },
           ],
-        });
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+        }));
+      },
+      handleSnapshotError('transactions')
+    );
+    unsubscribers.push(transactionsUnsub);
 
-    fetchDashboardData();
+    const disputesUnsub = onSnapshot(
+      collection(db, 'disputes'),
+      (snapshot) => {
+        const openDisputes = snapshot.docs.filter(
+          (doc) => isOpenDispute(doc.data().status)
+        ).length;
+
+        setStats((prevStats) => ({
+          ...prevStats,
+          openDisputes,
+        }));
+      },
+      handleSnapshotError('disputes')
+    );
+    unsubscribers.push(disputesUnsub);
+
+    const refundsUnsub = onSnapshot(
+      collection(db, 'refunds'),
+      (snapshot) => {
+        const pendingRefunds = snapshot.docs.filter(
+          (doc) => isActiveRefund(doc.data().status)
+        ).length;
+
+        setStats((prevStats) => ({
+          ...prevStats,
+          pendingRefunds,
+        }));
+      },
+      handleSnapshotError('refunds')
+    );
+    unsubscribers.push(refundsUnsub);
+
+    // Subscribe to audit logs
+    const auditUnsub = onSnapshot(
+      query(
+        collection(db, 'auditLogs'),
+        orderBy('timestamp', 'desc'),
+        limit(10)
+      ),
+      (snapshot) => {
+        const activity = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setRecentActivity(activity);
+      },
+      handleSnapshotError('audit logs')
+    );
+    unsubscribers.push(auditUnsub);
+
+    setLoading(false);
+
+    // Cleanup all subscriptions on unmount
+    return () => {
+      unsubscribers.forEach((unsub) => unsub());
+    };
   }, []);
 
   const activityColumns = [
@@ -206,6 +284,12 @@ export default function Dashboard() {
         </Typography>
       </Box>
 
+      {dashboardError && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          {dashboardError}
+        </Alert>
+      )}
+
       {/* Key Performance Indicators */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
@@ -242,7 +326,8 @@ export default function Dashboard() {
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Pending Items"
-            value={stats.pendingApprovals}
+            value={stats.pendingApprovals + stats.openDisputes + stats.pendingRefunds}
+            subtitle={`${stats.pendingApprovals} verifications, ${stats.openDisputes} disputes, ${stats.pendingRefunds} refunds`}
             icon={WarningIcon}
             loading={loading}
             color={COLORS.pending}
@@ -395,7 +480,12 @@ export default function Dashboard() {
                 </Box>
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {chartData.paymentStatus.map((item) => (
+                  {chartData.paymentStatus.map((item) => {
+                    const paymentTotal = chartData.paymentStatus.reduce(
+                      (sum, status) => sum + status.value,
+                      0
+                    );
+                    return (
                     <Box key={item.name}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.gray900 }}>
@@ -407,7 +497,7 @@ export default function Dashboard() {
                       </Box>
                       <LinearProgress
                         variant="determinate"
-                        value={(item.value / (chartData.paymentStatus[0].value + chartData.paymentStatus[1].value + chartData.paymentStatus[2].value)) * 100}
+                        value={safePercent(item.value, paymentTotal)}
                         sx={{
                           height: 8,
                           borderRadius: '4px',
@@ -419,7 +509,8 @@ export default function Dashboard() {
                         }}
                       />
                     </Box>
-                  ))}
+                    );
+                  })}
                 </Box>
               )}
             </CardContent>
@@ -477,7 +568,17 @@ export default function Dashboard() {
                 fontWeight: 600,
               }}
             >
-              Resolve Disputes
+              Resolve Disputes ({stats.openDisputes})
+            </Button>
+            <Button
+              variant="outlined"
+              href="/refunds"
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+            >
+              Review Refunds ({stats.pendingRefunds})
             </Button>
             <Button
               variant="outlined"

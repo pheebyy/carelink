@@ -29,11 +29,12 @@ import {
   Pending as PendingIcon,
   Error as ErrorIcon,
 } from '@mui/icons-material';
-import { collection, getDocs, query, orderBy, limit, doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit, doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAdmin } from '../context/AdminContext';
 import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
+import { showSuccess, showError } from '../lib/toast';
 
 const statusColors = {
   pending: '#ff9800',
@@ -67,49 +68,50 @@ export default function PayoutsPage() {
   const { getFunctions, httpsCallable } = firebaseFunctions;
   const functions = getFunctions();
 
-  // Fetch payout batches on mount
+  // Set up real-time listener for payout batches
   useEffect(() => {
-    fetchPayoutBatches();
+    const q = query(
+      collection(db, 'payoutBatches'),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const batches = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate?.() || new Date(),
+        }));
+
+        setPayoutBatches(batches);
+
+        // Calculate stats
+        const pending = batches.filter((b) => b.status === 'pending');
+        const completed = batches.filter((b) => b.status === 'completed');
+
+        const pendingAmount = pending.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+        const completedAmount = completed.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+
+        setStats({
+          totalPayouts: batches.length,
+          pendingAmount,
+          completedAmount,
+          averagePayout: batches.length > 0 ?
+            batches.reduce((sum, b) => sum + (b.totalAmount || 0), 0) / batches.length : 0,
+        });
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching payout batches:', error);
+        setLoading(false);
+      }
+    );
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, []);
-
-  const fetchPayoutBatches = async () => {
-    setLoading(true);
-    try {
-      const q = query(
-        collection(db, 'payoutBatches'),
-        orderBy('createdAt', 'desc'),
-        limit(50)
-      );
-
-      const snapshot = await getDocs(q);
-      const batches = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || new Date(),
-      }));
-
-      setPayoutBatches(batches);
-
-      // Calculate stats
-      const pending = batches.filter((b) => b.status === 'pending');
-      const completed = batches.filter((b) => b.status === 'completed');
-
-      const pendingAmount = pending.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-      const completedAmount = completed.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-
-      setStats({
-        totalPayouts: batches.length,
-        pendingAmount,
-        completedAmount,
-        averagePayout: batches.length > 0 ?
-          batches.reduce((sum, b) => sum + (b.totalAmount || 0), 0) / batches.length : 0,
-      });
-    } catch (error) {
-      console.error('Error fetching payout batches:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchBatchDetails = async (batchId) => {
     try {
@@ -124,7 +126,7 @@ export default function PayoutsPage() {
       setOpenDetails(true);
     } catch (error) {
       console.error('Error fetching batch details:', error);
-      alert('Failed to fetch batch details');
+      showError('Failed to fetch batch details');
     }
   };
 
@@ -138,12 +140,11 @@ export default function PayoutsPage() {
       );
 
       await approvPayoutBatch({ batchId });
-      alert('✅ Batch approved!');
-      fetchPayoutBatches();
+      showSuccess('Batch approved!');
       setOpenDetails(false);
     } catch (error) {
       console.error('Error approving batch:', error);
-      alert('Failed to approve batch');
+      showError('Failed to approve batch');
     }
   };
 

@@ -113,56 +113,86 @@ class _CaregiverVerificationScreenState
       final uid = user.uid;
       final List<Map<String, String>> uploadedDocs = [];
 
+      print('🚀 Beginning document upload process for user: $uid');
+      
       // Upload practice license
-      final licenseResult = await _storageService.uploadVerificationDocument(
-        uid: uid,
-        documentType: 'practice_license',
-        bytes: await _licenseFile!.readAsBytes(),
-        fileExtension: 'jpg',
-        contentType: 'image/jpeg',
-      );
-      uploadedDocs.add({
-        'documentType': 'practice_license',
-        'storageUrl': licenseResult['storageUrl']!,
-        'fileName': licenseResult['fileName']!,
-        'documentValue': _licenseNumberCtrl.text.trim(),
-      });
+      print('📄 Uploading practice license...');
+      try {
+        final licenseResult = await _storageService.uploadVerificationDocument(
+          uid: uid,
+          documentType: 'practice_license',
+          bytes: await _licenseFile!.readAsBytes(),
+          fileExtension: 'jpg',
+          contentType: 'image/jpeg',
+        );
+        uploadedDocs.add({
+          'documentType': 'practice_license',
+          'storageUrl': licenseResult['storageUrl']!,
+          'fileName': licenseResult['fileName']!,
+          'documentValue': _licenseNumberCtrl.text.trim(),
+        });
+        print('✅ Practice license uploaded successfully');
+      } catch (e) {
+        print('🔥 Practice license upload failed: $e');
+        throw Exception('Practice license upload failed: $e');
+      }
 
       // Upload national ID
-      final idResult = await _storageService.uploadVerificationDocument(
-        uid: uid,
-        documentType: 'national_id',
-        bytes: await _idFile!.readAsBytes(),
-        fileExtension: 'jpg',
-        contentType: 'image/jpeg',
-      );
-      uploadedDocs.add({
-        'documentType': 'national_id',
-        'storageUrl': idResult['storageUrl']!,
-        'fileName': idResult['fileName']!,
-        'documentValue': _idNumberCtrl.text.trim(),
-      });
+      print('📄 Uploading national ID...');
+      try {
+        final idResult = await _storageService.uploadVerificationDocument(
+          uid: uid,
+          documentType: 'national_id',
+          bytes: await _idFile!.readAsBytes(),
+          fileExtension: 'jpg',
+          contentType: 'image/jpeg',
+        );
+        uploadedDocs.add({
+          'documentType': 'national_id',
+          'storageUrl': idResult['storageUrl']!,
+          'fileName': idResult['fileName']!,
+          'documentValue': _idNumberCtrl.text.trim(),
+        });
+        print('✅ National ID uploaded successfully');
+      } catch (e) {
+        print('🔥 National ID upload failed: $e');
+        throw Exception('National ID upload failed: $e');
+      }
 
       // Upload passport photo
-      final passportResult = await _storageService.uploadVerificationDocument(
-        uid: uid,
-        documentType: 'passport_photo',
-        bytes: await _passportFile!.readAsBytes(),
-        fileExtension: 'jpg',
-        contentType: 'image/jpeg',
-      );
-      uploadedDocs.add({
-        'documentType': 'passport_photo',
-        'storageUrl': passportResult['storageUrl']!,
-        'fileName': passportResult['fileName']!,
-        'documentValue': _passportNumberCtrl.text.trim(),
-      });
+      print('📄 Uploading passport photo...');
+      try {
+        final passportResult = await _storageService.uploadVerificationDocument(
+          uid: uid,
+          documentType: 'passport_photo',
+          bytes: await _passportFile!.readAsBytes(),
+          fileExtension: 'jpg',
+          contentType: 'image/jpeg',
+        );
+        uploadedDocs.add({
+          'documentType': 'passport_photo',
+          'storageUrl': passportResult['storageUrl']!,
+          'fileName': passportResult['fileName']!,
+          'documentValue': _passportNumberCtrl.text.trim(),
+        });
+        print('✅ Passport photo uploaded successfully');
+      } catch (e) {
+        print('🔥 Passport photo upload failed: $e');
+        throw Exception('Passport photo upload failed: $e');
+      }
 
       // Submit to Firestore
-      await _firestoreService.submitVerificationDocuments(
-        caregiverId: uid,
-        documents: uploadedDocs,
-      );
+      print('💾 Submitting documents to Firestore...');
+      try {
+        await _firestoreService.submitVerificationDocuments(
+          caregiverId: uid,
+          documents: uploadedDocs,
+        );
+        print('✅ Documents submitted to Firestore');
+      } catch (e) {
+        print('🔥 Firestore submission failed: $e');
+        throw Exception('Failed to submit documents: $e');
+      }
 
       setState(() {
         _successMessage =

@@ -117,7 +117,117 @@ exports.setAdminRole = onCall(async (request) => {
   return { success: true, uid, admin: isAdmin };
 });
 
-// 🔹 Initialize Paystack Transaction
+// 🔐 Add a new admin by email.
+// Only callers with a 'superadmin' role can invoke this.
+exports.addAdminRole = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Authentication is required."
+    );
+  }
+
+  // Verify caller is a superadmin
+  const callerDoc = await db.collection("admins").doc(request.auth.uid).get();
+  if (!callerDoc.exists || callerDoc.data().role !== 'superadmin') {
+    throw new HttpsError(
+      "permission-denied",
+      "Only superadmins can add new admins."
+    );
+  }
+
+  const { email, role } = request.data;
+  if (!email || !role) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Email and role are required."
+    );
+  }
+
+  try {
+    // Get user by email
+    const user = await admin.auth().getUserByEmail(email);
+
+    // Set custom claims
+    await admin.auth().setCustomUserClaims(user.uid, { admin: true, admin_role: role });
+
+    // Create admin document in Firestore
+    await db.collection("admins").doc(user.uid).set({
+      email: user.email,
+      role: role,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error adding admin role:", error);
+    if (error.code === 'auth/user-not-found') {
+      throw new HttpsError("not-found", `User with email ${email} not found.`);
+    }
+    throw new HttpsError("internal", "An internal error occurred.");
+  }
+});
+
+// � Migrate existing admin users to new claims structure
+exports.migrateAdminClaims = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Authentication is required."
+    );
+  }
+
+  // Only allow superadmins to run migration
+  const callerDoc = await db.collection("admins").doc(request.auth.uid).get();
+  if (!callerDoc.exists || callerDoc.data().role !== 'superadmin') {
+    throw new HttpsError(
+      "permission-denied",
+      "Only superadmins can run migrations."
+    );
+  }
+
+  try {
+    // Get all admin documents
+    const adminsSnapshot = await db.collection("admins").get();
+    const migrationResults = [];
+
+    for (const adminDoc of adminsSnapshot.docs) {
+      const adminData = adminDoc.data();
+      const uid = adminDoc.id;
+
+      try {
+        // Get current user
+        const user = await admin.auth().getUser(uid);
+        
+        // Set proper claims
+        await admin.auth().setCustomUserClaims(uid, { 
+          admin: true, 
+          admin_role: adminData.role || 'admin' 
+        });
+
+        migrationResults.push({
+          uid,
+          email: user.email,
+          status: 'success',
+          role: adminData.role
+        });
+      } catch (error) {
+        migrationResults.push({
+          uid,
+          status: 'error',
+          error: error.message
+        });
+      }
+    }
+
+    return { success: true, results: migrationResults };
+  } catch (error) {
+    console.error("Migration error:", error);
+    throw new HttpsError("internal", "Migration failed: " + error.message);
+  }
+});
+
+// �🔹 Initialize Paystack Transaction
 exports.initializeTransaction = onCall(async (request) => {
   console.log("🔹 initializeTransaction called with:", {
     email: request.data.email,
@@ -686,6 +796,160 @@ exports.sendRefundConfirmationEmail = onCall(async (request) => {
   } catch (error) {
     console.error("Error sending refund email:", error.message);
     throw new HttpsError("internal", "Failed to send refund email.");
+  }
+});
+
+// ✅ Send caregiver verification submission confirmation email
+exports.sendVerificationSubmissionEmail = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("permission-denied", "Authentication required.");
+  }
+
+  const { caregiverId, caregiverName, caregiverEmail } = request.data || {};
+
+  if (!caregiverId || !caregiverEmail) {
+    throw new HttpsError("invalid-argument", "Missing caregiverId or caregiverEmail.");
+  }
+
+  try {
+    const htmlContent = `
+      <h2>Verification Documents Received ✅</h2>
+      <p>Hello ${caregiverName || "Caregiver"},</p>
+      <p>Thank you for submitting your verification documents! We have successfully received your submission.</p>
+      
+      <h3>What's Next?</h3>
+      <p>Our admin team will review your documents and verify them against official records from:</p>
+      <ul>
+        <li>Kenyan Nursing Council (KNC) Registry</li>
+        <li>National ID Database</li>
+        <li>Passport Office</li>
+      </ul>
+      
+      <p><strong>Expected Timeline:</strong> 24-48 hours</p>
+      
+      <h3>Your Submitted Documents</h3>
+      <ul>
+        <li>✓ Practice License</li>
+        <li>✓ National ID</li>
+        <li>✓ Passport Photo</li>
+      </ul>
+      
+      <p>You can track your verification status in the CareLink app under <strong>Profile → Verification Status</strong>.</p>
+      
+      <p><strong>Important:</strong> Once your verification is approved, you'll receive an email notification and can immediately start bidding on jobs!</p>
+      
+      <p>If you have any questions, please contact our support team at support@carelink.app</p>
+      
+      <p>Best regards,<br><strong>CareLink Verification Team</strong></p>
+    `;
+
+    const result = await sendEmail(caregiverEmail, "CareLink - Verification Documents Received", htmlContent);
+    console.log(` Verification submission email sent to ${caregiverEmail}`);
+    return { success: result.success };
+  } catch (error) {
+    console.error("Error sending verification submission email:", error.message);
+    throw new HttpsError("internal", "Failed to send verification email.");
+  }
+});
+
+// ✅ Send caregiver verification result email (approval or rejection)
+exports.sendVerificationResultEmail = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("permission-denied", "Authentication required.");
+  }
+
+  const { caregiverId, approved, reason } = request.data || {};
+
+  if (!caregiverId || typeof approved !== "boolean") {
+    throw new HttpsError("invalid-argument", "Missing caregiverId or approved status.");
+  }
+
+  try {
+    // Get caregiver info
+    const userDoc = await db.collection("users").doc(caregiverId).get();
+    if (!userDoc.exists) {
+      throw new HttpsError("not-found", "User not found.");
+    }
+
+    const userData = userDoc.data();
+    const caregiverEmail = userData.email;
+    const caregiverName = userData.name || userData.displayName || "Caregiver";
+
+    let subject = "";
+    let htmlContent = "";
+
+    if (approved) {
+      subject = "CareLink - Verification Approved! 🎉";
+      htmlContent = `
+        <h2>Verification Approved! 🎉</h2>
+        <p>Hello ${caregiverName},</p>
+        <p>Great news! Your verification has been <strong style="color: green;">successfully approved</strong>!</p>
+        
+        <h3>You Can Now:</h3>
+        <ul>
+          <li>✅ Bid on available jobs</li>
+          <li>✅ Build your reputation with clients</li>
+          <li>✅ Earn money through CareLink</li>
+          <li>✅ Access premium features (optional)</li>
+        </ul>
+        
+        <h3>Next Steps:</h3>
+        <ol>
+          <li>Open the CareLink app</li>
+          <li>Go to the <strong>Jobs</strong> tab to see available opportunities</li>
+          <li>Browse and bid on jobs that match your skills</li>
+          <li>Connect with clients and start earning!</li>
+        </ol>
+        
+        <p><strong>Your verification status will display as "Approved" in your profile.</strong></p>
+        
+        <p>Welcome to the CareLink community! We're excited to have you on board.</p>
+        
+        <p>If you have any questions, contact support at support@carelink.app</p>
+        
+        <p>Best regards,<br><strong>CareLink Team</strong></p>
+      `;
+    } else {
+      subject = "CareLink - Verification Status Update";
+      htmlContent = `
+        <h2>Verification Status Update</h2>
+        <p>Hello ${caregiverName},</p>
+        <p>Thank you for submitting your verification documents. Unfortunately, your verification was <strong style="color: #ff6b00;">not approved</strong> at this time.</p>
+        
+        <h3>Reason:</h3>
+        <p>${reason || "Your documents did not meet our verification requirements."}</p>
+        
+        <h3>What You Can Do:</h3>
+        <ul>
+          <li>📸 Review the feedback provided</li>
+          <li>📝 Prepare updated documents if needed</li>
+          <li>🔄 Resubmit your verification documents</li>
+          <li>📞 Contact support for clarification</li>
+        </ul>
+        
+        <h3>How to Resubmit:</h3>
+        <ol>
+          <li>Open the CareLink app</li>
+          <li>Go to <strong>Profile → Verification</strong></li>
+          <li>Review the requirements</li>
+          <li>Submit updated documents</li>
+        </ol>
+        
+        <p><strong>Note:</strong> Please ensure all documents are clear, valid, and match exactly with your details.</p>
+        
+        <p>We're here to help! If you need clarification or have questions, please contact our support team at support@carelink.app</p>
+        
+        <p>Best regards,<br><strong>CareLink Verification Team</strong></p>
+      `;
+    }
+
+    const result = await sendEmail(caregiverEmail, subject, htmlContent);
+    console.log(`📧 Verification result email (${approved ? "approved" : "rejected"}) sent to ${caregiverEmail}`);
+    return { success: result.success };
+  } catch (error) {
+    console.error("Error sending verification result email:", error.message);
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError("internal", "Failed to send verification result email.");
   }
 });
 

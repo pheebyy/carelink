@@ -1,7 +1,9 @@
 import React, { useEffect } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { Toaster } from 'react-hot-toast';
 import { AdminProvider, useAdmin } from '../context/AdminContext';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useRouter } from 'next/router';
 import { CircularProgress, Box } from '@mui/material';
 import Layout from '../components/Layout';
@@ -307,11 +309,14 @@ function AppContent({ Component, pageProps }) {
 
 export default function App({ Component, pageProps }) {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <AdminProvider>
-        <AppContent Component={Component} pageProps={pageProps} />
-      </AdminProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Toaster position="top-right" />
+        <AdminProvider>
+          <AppContent Component={Component} pageProps={pageProps} />
+        </AdminProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

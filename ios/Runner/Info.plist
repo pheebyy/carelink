@@ -29,6 +29,10 @@
 		<key>UIMainStoryboardFile</key>
 		<string>Main</string>
 		<key>UISupportedInterfaceOrientations</key>
+		<key>io.flutter.embedded_views_preview</key>
+		<true/>
+		<key>GoogleMapsAPIKey</key>
+		<string>AIzaSyAra8dyyTDYpQi4JAaeaSp6KDn2YGv2sa8</string>
 		<array>
 			<string>UIInterfaceOrientationPortrait</string>
 			<string>UIInterfaceOrientationLandscapeLeft</string>

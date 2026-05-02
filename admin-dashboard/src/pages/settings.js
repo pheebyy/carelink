@@ -20,20 +20,48 @@ import {
   FormControlLabel,
   Checkbox,
   Paper,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
-import { db } from '../lib/firebase';
+import { db, functions } from '../lib/firebase';
 import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { showSuccess, showError } from '../lib/toast';
 import { useAdmin } from '../context/AdminContext';
 
 export default function SettingsPage() {
-  const { adminRole } = useAdmin();
+  const { adminRole, loading, error } = useAdmin();
   const [admins, setAdmins] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingAdmins, setLoadingAdmins] = useState(true);
   const [selectedAdmin, setSelectedAdmin] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [permissions, setPermissions] = useState({});
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminRole, setNewAdminRole] = useState('moderator');
+
+  // Show loading spinner while admin context is loading
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
+        <CircularProgress />
+        <Typography sx={{ ml: 2 }}>Loading admin settings...</Typography>
+      </Box>
+    );
+  }
+
+  // Show error if admin verification failed
+  if (error) {
+    return (
+      <Box>
+        <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 3 }}>
+          Settings
+        </Typography>
+        <Alert severity="error">
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
 
   const availableRoles = [
     { id: 'moderator', label: 'Moderator', description: 'Can verify users and moderate jobs' },
@@ -68,7 +96,7 @@ export default function SettingsPage() {
       } catch (error) {
         console.error('Error fetching admins:', error);
       } finally {
-        setLoading(false);
+        setLoadingAdmins(false);
       }
     };
 
@@ -99,18 +127,61 @@ export default function SettingsPage() {
 
       setOpenDialog(false);
       setSelectedAdmin(null);
-      alert('Permissions updated successfully');
+      showSuccess('Permissions updated successfully');
     } catch (error) {
       console.error('Error updating permissions:', error);
-      alert('Error: ' + error.message);
+      showError('Error: ' + error.message);
     }
   };
 
-  const handlePermissionChange = (permissionKey) => {
-    setPermissions({
-      ...permissions,
-      [permissionKey]: !permissions[permissionKey],
-    });
+  const handleAddAdmin = async () => {
+    if (!newAdminEmail) {
+      showError('Please enter an email');
+      return;
+    }
+
+    try {
+      const addAdminRole = httpsCallable(functions, 'addAdminRole');
+      const result = await addAdminRole({ email: newAdminEmail, role: newAdminRole });
+
+      if (result.data.success) {
+        showSuccess(`Admin role (${newAdminRole}) assigned to ${newAdminEmail}`);
+        // Refresh admin list
+        const adminsSnapshot = await getDocs(collection(db, 'admins'));
+        const adminsList = adminsSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setAdmins(adminsList);
+        setNewAdminEmail('');
+      } else {
+        showError(result.data.error || 'Failed to add admin');
+      }
+    } catch (error) {
+      console.error('Error adding admin:', error);
+      showError(error.message);
+    }
+  };
+
+  const handleMigrateClaims = async () => {
+    if (!window.confirm('This will update all admin users with proper authentication claims. Continue?')) {
+      return;
+    }
+
+    try {
+      const migrateClaims = httpsCallable(functions, 'migrateAdminClaims');
+      const result = await migrateClaims();
+
+      if (result.data.success) {
+        showSuccess(`Migration completed. Updated ${result.data.results.filter(r => r.status === 'success').length} admins.`);
+        console.log('Migration results:', result.data.results);
+      } else {
+        showError('Migration failed');
+      }
+    } catch (error) {
+      console.error('Error migrating claims:', error);
+      showError(error.message);
+    }
   };
 
   if (adminRole !== 'superadmin') {
@@ -126,6 +197,16 @@ export default function SettingsPage() {
             </Typography>
           </CardContent>
         </Card>
+      </Box>
+    );
+  }
+
+  // Show loading spinner while fetching admins
+  if (loadingAdmins) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
+        <CircularProgress />
+        <Typography sx={{ ml: 2 }}>Loading admin data...</Typography>
       </Box>
     );
   }
@@ -224,6 +305,28 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Admin Management Tools */}
+      <Card sx={{ mb: 4 }}>
+        <CardContent>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+            Admin Management Tools
+          </Typography>
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+            Maintenance tools for admin system. Use with caution.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              color="secondary"
+              onClick={handleMigrateClaims}
+              disabled={adminRole !== 'superadmin'}
+            >
+              🔄 Migrate Admin Claims
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
+
       {/* Add New Admin */}
       <Card>
         <CardContent>
@@ -258,8 +361,8 @@ export default function SettingsPage() {
               </TextField>
             </Grid>
             <Grid item xs={12}>
-              <Button variant="contained">
-                Add Admin (Requires Cloud Function)
+              <Button variant="contained" onClick={handleAddAdmin}>
+                Add Admin
               </Button>
             </Grid>
           </Grid>

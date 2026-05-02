@@ -21,7 +21,7 @@ class JobModel {
   final bool clientConfirmedCompletion;
   final bool caregiverConfirmedCompletion;
   final String? paymentReference; // Link to payment transaction
-  final bool hasPendingBids; // ✅ NEW: Indicates if job has pending bids
+  final bool hasPendingBids; //  NEW: Indicates if job has pending bids
 
   JobModel({
     required this.id,
@@ -44,7 +44,7 @@ class JobModel {
     this.clientConfirmedCompletion = false,
     this.caregiverConfirmedCompletion = false,
     this.paymentReference,
-    this.hasPendingBids = false, // ✅ NEW
+    this.hasPendingBids = false, //  NEW
   });
 
   factory JobModel.fromDoc(DocumentSnapshot doc) {
@@ -70,7 +70,7 @@ class JobModel {
       clientConfirmedCompletion: data['clientConfirmedCompletion'] ?? false,
       caregiverConfirmedCompletion: data['caregiverConfirmedCompletion'] ?? false,
       paymentReference: data['paymentReference'],
-      hasPendingBids: data['hasPendingBids'] ?? false, // ✅ NEW
+      hasPendingBids: data['hasPendingBids'] ?? false, //  NEW
     );
   }
 

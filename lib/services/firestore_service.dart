@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
   // ========================= USERS =========================
   Future<void> createUser(String uid, Map<String, dynamic> data) async {
@@ -78,9 +80,50 @@ class FirestoreService {
       });
 
       print('✅ Verification documents submitted for caregiver: $caregiverId');
+
+      // Send verification submission email
+      await _sendVerificationSubmissionEmail(caregiverId);
     } catch (e) {
       print('🔥 Error submitting verification documents: $e');
       rethrow;
+    }
+  }
+
+  /// Send verification submission confirmation email to caregiver
+  Future<void> _sendVerificationSubmissionEmail(String caregiverId) async {
+    try {
+      // Get caregiver info
+      final userDoc = await _db.collection('users').doc(caregiverId).get();
+      if (!userDoc.exists) {
+        print('⚠️  Caregiver document not found for email');
+        return;
+      }
+
+      final userData = userDoc.data() ?? {};
+      final caregiverEmail = userData['email'] as String? ?? '';
+      final caregiverName = userData['name'] as String? ?? userData['displayName'] ?? 'Caregiver';
+
+      if (caregiverEmail.isEmpty) {
+        print('⚠️  Caregiver email not found');
+        return;
+      }
+
+      // Call Cloud Function to send email
+      print('📧 Calling sendVerificationSubmissionEmail Cloud Function...');
+      final result = await _functions.httpsCallable('sendVerificationSubmissionEmail').call({
+        'caregiverId': caregiverId,
+        'caregiverEmail': caregiverEmail,
+        'caregiverName': caregiverName,
+      });
+
+      if (result.data['success']) {
+        print('✅ Verification submission email sent successfully');
+      } else {
+        print('⚠️  Email could not be sent (SendGrid may not be configured)');
+      }
+    } catch (e) {
+      print('❌ Error sending verification submission email: $e');
+      // Don't rethrow - email sending is not critical to the verification flow
     }
   }
 

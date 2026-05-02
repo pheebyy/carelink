@@ -18,6 +18,15 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
+    // Verification documents (practice license, national ID, passport)
+    match /users/{uid}/verification/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(uid)
+        && request.resource != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
     // Deny everything else by default.
     match /{allPaths=**} {
       allow read, write: if false;

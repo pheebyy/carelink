@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const AdminContext = createContext();
 
@@ -20,13 +20,33 @@ export const AdminProvider = ({ children }) => {
         try {
           // Get admin document and custom claims
           const idTokenResult = await currentUser.getIdTokenResult(true);
-          const adminRole = idTokenResult.claims.admin_role;
-          const adminDoc = await getDoc(doc(db, 'admins', currentUser.uid));
+          const adminRoleFromClaims = idTokenResult.claims.admin_role;
+          const adminClaim = idTokenResult.claims.admin;
+          
+          // Try to get admin document from admins collection first
+          let adminDoc = await getDoc(doc(db, 'admins', currentUser.uid));
+          
+          // If not found in admins collection, check users collection for backward compatibility
+          if (!adminDoc.exists()) {
+            const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+            if (userDoc.exists() && (userDoc.data().role === 'admin' || adminClaim === true)) {
+              // Create admin document in admins collection for migration
+              const adminData = {
+                email: currentUser.email,
+                role: adminRoleFromClaims || 'superadmin', // Default to superadmin for bootstrapped admins
+                permissions: {}, // Will be filled based on role
+                migratedFrom: 'users',
+                createdAt: new Date(),
+              };
+              await setDoc(doc(db, 'admins', currentUser.uid), adminData);
+              adminDoc = await getDoc(doc(db, 'admins', currentUser.uid));
+            }
+          }
 
-          if (adminDoc.exists() && adminRole) {
+          if (adminDoc.exists() && (adminRoleFromClaims || adminClaim === true)) {
             const adminData = adminDoc.data();
             setUser(currentUser);
-            setAdminRole(adminRole);
+            setAdminRole(adminRoleFromClaims || adminData.role || 'admin');
             setPermissions(adminData.permissions || {});
           } else {
             setError('Not an admin user');

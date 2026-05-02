@@ -23,6 +23,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { StatCard } from '../components/StatCard';
 import { formatDate, formatCurrency } from '../lib/utils';
 import { COLORS, SHADOWS, TRANSITIONS } from '../lib/themeConstants';
+import { showSuccess, showError } from '../lib/toast';
 import {
   Work as WorkIcon,
   PublishedWithChanges as ApprovedIcon,
@@ -131,10 +132,10 @@ export default function JobsPage() {
       setOpenDetail(false);
       setSelectedJob(null);
       setRejectionReason('');
-      alert('Action completed successfully');
+      showSuccess('Action completed successfully');
     } catch (error) {
       console.error('Error performing action:', error);
-      alert('Error: ' + error.message);
+      showError('Error: ' + error.message);
     }
   };
 

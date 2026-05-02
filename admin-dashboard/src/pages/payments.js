@@ -15,11 +15,12 @@ import {
   MenuItem,
 } from '@mui/material';
 import { db } from '../lib/firebase';
-import { collection, getDocs, updateDoc, doc, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, updateDoc, doc, query, where } from 'firebase/firestore';
 import { DataTable } from '../components/DataTable';
 import { StatCard } from '../components/StatCard';
 import { formatDate, formatCurrency, getStatusColor, getStatusIcon } from '../lib/utils';
 import { Payment as PaymentIcon } from '@mui/icons-material';
+import { showSuccess, showError } from '../lib/toast';
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState([]);
@@ -33,10 +34,11 @@ export default function PaymentsPage() {
   const [actionType, setActionType] = useState('');
 
   useEffect(() => {
-    const fetchPayments = async () => {
-      try {
-        const paymentsSnapshot = await getDocs(collection(db, 'payments'));
-        const paymentsList = paymentsSnapshot.docs.map((doc) => ({
+    // Set up real-time listener for payments
+    const unsubscribe = onSnapshot(
+      collection(db, 'payments'),
+      (snapshot) => {
+        const paymentsList = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
@@ -53,14 +55,16 @@ export default function PaymentsPage() {
           completed,
           failed,
         });
-      } catch (error) {
+        setLoading(false);
+      },
+      (error) => {
         console.error('Error fetching payments:', error);
-      } finally {
         setLoading(false);
       }
-    };
+    );
 
-    fetchPayments();
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -93,10 +97,10 @@ export default function PaymentsPage() {
       setOpenAction(false);
       setOpenDetail(false);
       setSelectedPayment(null);
-      alert('Payment updated successfully');
+      showSuccess('Payment updated successfully');
     } catch (error) {
       console.error('Error updating payment:', error);
-      alert('Error: ' + error.message);
+      showError('Error: ' + error.message);
     }
   };
 

@@ -1,409 +1,503 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Box,
+  Button,
   Card,
   CardContent,
-  Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Grid,
+  MenuItem,
+  TextField,
+  Typography,
   CircularProgress,
-  Alert,
-  Pagination,
-  TablePagination,
+  Divider,
 } from '@mui/material';
-import { collection, query, where, orderBy, getDocs, limit, startAfter } from 'firebase/firestore';
-import { db, functions } from '../lib/firebase';
+import {
+  CheckCircle as CheckCircleIcon,
+  ErrorOutline as ErrorIcon,
+  PendingActions as PendingIcon,
+  Replay as RetryIcon,
+} from '@mui/icons-material';
 import { httpsCallable } from 'firebase/functions';
-import StatCard from '../components/StatCard';
-import { useState as useStateCallback } from 'react';
+import {
+  addDoc,
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+} from 'firebase/firestore';
+import { db, functions } from '../lib/firebase';
+import { DataTable } from '../components/DataTable';
+import { StatCard } from '../components/StatCard';
+import { StatusBadge } from '../components/StatusBadge';
+import { useAdmin } from '../context/AdminContext';
+import { formatCurrency, formatDateTime } from '../lib/utils';
+import { COLORS } from '../lib/themeConstants';
+import { showError, showSuccess } from '../lib/toast';
 
-const RefundsPage = () => {
+const activeRefundStatuses = ['pending', 'processing'];
+
+const getRefundAmount = (refund) => Number(refund.amount || 0);
+
+export default function RefundsPage() {
+  const { user, canPerform } = useAdmin();
+  const canManageRefunds = canPerform('approvePayouts') || canPerform('manageDisputes');
   const [refunds, setRefunds] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [stats, setStats] = useState({
-    totalRefunds: 0,
-    pendingAmount: 0,
-    completedAmount: 0,
-    failedCount: 0,
-  });
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [selectedRefund, setSelectedRefund] = useState(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [retryLoading, setRetryLoading] = useState(false);
-  const [manualApprovalOpen, setManualApprovalOpen] = useState(false);
-  const [approvalNote, setApprovalNote] = useState('');
-
-  // Fetch refunds
-  const fetchRefunds = async () => {
-    try {
-      setLoading(true);
-      const listRefunds = httpsCallable(functions, 'listRefunds');
-      const result = await listRefunds({ 
-        status: statusFilter || undefined,
-        limit: rowsPerPage,
-      });
-
-      setRefunds(result.data.refunds);
-
-      // Calculate stats
-      const pendingRefunds = result.data.refunds.filter(r => r.status === 'pending' || r.status === 'processing');
-      const completedRefunds = result.data.refunds.filter(r => r.status === 'completed');
-      const failedRefunds = result.data.refunds.filter(r => r.status === 'failed');
-
-      setStats({
-        totalRefunds: result.data.refunds.length,
-        pendingAmount: pendingRefunds.reduce((sum, r) => sum + r.amount, 0),
-        completedAmount: completedRefunds.reduce((sum, r) => sum + r.amount, 0),
-        failedCount: failedRefunds.length,
-      });
-
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching refunds:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [decisionOpen, setDecisionOpen] = useState(false);
+  const [decisionType, setDecisionType] = useState('');
+  const [decisionNote, setDecisionNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchRefunds();
-  }, [statusFilter, page, rowsPerPage]);
+    const refundsQuery = query(collection(db, 'refunds'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(
+      refundsQuery,
+      (snapshot) => {
+        setRefunds(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error loading refunds:', error);
+        showError('Unable to load refunds: ' + error.message);
+        setLoading(false);
+      }
+    );
 
-  const handleStatusFilter = (status) => {
-    setStatusFilter(status);
-    setPage(0);
+    return () => unsubscribe();
+  }, []);
+
+  const filteredRefunds = useMemo(() => {
+    if (statusFilter === 'all') return refunds;
+    if (statusFilter === 'active') {
+      return refunds.filter((refund) => activeRefundStatuses.includes(refund.status));
+    }
+    return refunds.filter((refund) => refund.status === statusFilter);
+  }, [refunds, statusFilter]);
+
+  const stats = useMemo(() => {
+    const active = refunds.filter((refund) => activeRefundStatuses.includes(refund.status));
+    const completed = refunds.filter((refund) => refund.status === 'completed');
+    const failed = refunds.filter((refund) => refund.status === 'failed');
+    const rejected = refunds.filter((refund) => refund.status === 'rejected');
+
+    return {
+      total: refunds.length,
+      activeCount: active.length,
+      activeAmount: active.reduce((sum, refund) => sum + getRefundAmount(refund), 0),
+      completedAmount: completed.reduce((sum, refund) => sum + getRefundAmount(refund), 0),
+      failedCount: failed.length,
+      rejectedCount: rejected.length,
+    };
+  }, [refunds]);
+
+  const writeAuditLog = async (action, refund, details = {}) => {
+    await addDoc(collection(db, 'auditLogs'), {
+      adminId: user?.uid || 'unknown',
+      action,
+      details: {
+        refundId: refund.id,
+        transactionId: refund.transactionId || null,
+        clientId: refund.clientId || null,
+        amount: refund.amount || 0,
+        ...details,
+      },
+      timestamp: serverTimestamp(),
+    });
   };
 
-  const handleViewDetails = (refund) => {
+  const notifyClient = async (refund, title, message) => {
+    if (!refund.clientId) return;
+
+    await addDoc(collection(db, 'notifications'), {
+      userId: refund.clientId,
+      type: 'refund_status',
+      title,
+      message,
+      read: false,
+      refundId: refund.id,
+      transactionId: refund.transactionId || null,
+      createdAt: serverTimestamp(),
+    });
+  };
+
+  const openDecision = (refund, type) => {
     setSelectedRefund(refund);
-    setDetailsOpen(true);
+    setDecisionType(type);
+    setDecisionNote('');
+    setDecisionOpen(true);
   };
 
-  const handleRetryRefund = async () => {
-    if (!selectedRefund) return;
+  const closeDecision = () => {
+    setDecisionOpen(false);
+    setDecisionType('');
+    setDecisionNote('');
+  };
 
+  const handleRetryRefund = async (refund) => {
     try {
-      setRetryLoading(true);
+      setSubmitting(true);
       const retryFailedRefund = httpsCallable(functions, 'retryFailedRefund');
-      await retryFailedRefund({ refundId: selectedRefund.id });
-
-      alert('Refund retry initiated successfully');
-      setDetailsOpen(false);
-      fetchRefunds();
-    } catch (err) {
-      alert(`Error: ${err.message}`);
+      await retryFailedRefund({ refundId: refund.id });
+      await writeAuditLog('retry_refund', refund);
+      showSuccess('Refund retry initiated');
+    } catch (error) {
+      console.error('Error retrying refund:', error);
+      showError('Error: ' + error.message);
     } finally {
-      setRetryLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const handleManualApproval = async () => {
-    if (!selectedRefund) return;
+  const handleDecision = async () => {
+    if (!selectedRefund || !decisionType) return;
+
+    if (!decisionNote.trim()) {
+      showError('Please add an admin note before continuing');
+      return;
+    }
 
     try {
-      setRetryLoading(true);
-      const manualRefundApproval = httpsCallable(functions, 'manualRefundApproval');
-      await manualRefundApproval({
-        refundId: selectedRefund.id,
-        approvalNote: approvalNote,
-      });
+      setSubmitting(true);
 
-      alert('Refund manually approved successfully');
-      setManualApprovalOpen(false);
-      setApprovalNote('');
+      if (decisionType === 'complete') {
+        const manualRefundApproval = httpsCallable(functions, 'manualRefundApproval');
+        await manualRefundApproval({
+          refundId: selectedRefund.id,
+          approvalNote: decisionNote,
+        });
+        await writeAuditLog('manual_refund_approval', selectedRefund, {
+          note: decisionNote,
+        });
+        await notifyClient(
+          selectedRefund,
+          'Refund approved',
+          `Your refund for ${formatCurrency(getRefundAmount(selectedRefund))} has been approved.`
+        );
+        showSuccess('Refund marked as completed');
+      }
+
+      if (decisionType === 'reject') {
+        await updateDoc(doc(db, 'refunds', selectedRefund.id), {
+          status: 'rejected',
+          rejectionReason: decisionNote,
+          rejectedAt: serverTimestamp(),
+          rejectedBy: user?.uid || null,
+          updatedAt: serverTimestamp(),
+        });
+
+        if (selectedRefund.transactionId) {
+          await updateDoc(doc(db, 'transactions', selectedRefund.transactionId), {
+            status: 'completed',
+            refundRejectedAt: serverTimestamp(),
+            refundRejectedBy: user?.uid || null,
+            refundRejectedReason: decisionNote,
+          });
+        }
+
+        await writeAuditLog('reject_refund', selectedRefund, {
+          reason: decisionNote,
+        });
+        await notifyClient(
+          selectedRefund,
+          'Refund rejected',
+          `Your refund request was rejected. Reason: ${decisionNote}`
+        );
+        showSuccess('Refund rejected');
+      }
+
+      closeDecision();
       setDetailsOpen(false);
-      fetchRefunds();
-    } catch (err) {
-      alert(`Error: ${err.message}`);
+      setSelectedRefund(null);
+    } catch (error) {
+      console.error('Error updating refund:', error);
+      showError('Error: ' + error.message);
     } finally {
-      setRetryLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending':
-        return 'warning';
-      case 'processing':
-        return 'info';
-      case 'completed':
-        return 'success';
-      case 'failed':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
+  const columns = [
+    {
+      key: 'refundId',
+      label: 'Refund',
+      render: (value, row) => (
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            {(value || row.id).substring(0, 18)}
+          </Typography>
+          <Typography variant="caption" color="textSecondary">
+            Tx: {row.transactionId || row.paystackReference || '-'}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      key: 'clientId',
+      label: 'Client',
+      render: (value) => value || '-',
+    },
+    {
+      key: 'amount',
+      label: 'Amount',
+      render: (value) => formatCurrency(Number(value || 0)),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (value) => <StatusBadge status={value || 'pending'} variant="soft" size="small" />,
+    },
+    {
+      key: 'reason',
+      label: 'Reason',
+      render: (value) => (
+        <Typography variant="body2" sx={{ maxWidth: 320 }}>
+          {value || '-'}
+        </Typography>
+      ),
+    },
+    {
+      key: 'createdAt',
+      label: 'Created',
+      render: (value) => formatDateTime(value),
+    },
+  ];
+
+  if (!canManageRefunds) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography color="error">
+            You do not have permission to manage refunds.
+          </Typography>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <h1>💰 Refund Management</h1>
+    <Box>
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h3" sx={{ fontWeight: 700, color: COLORS.gray900 }}>
+          Refund Management
+        </Typography>
+        <Typography variant="body2" sx={{ color: COLORS.gray600 }}>
+          Review refund requests, retry failed refunds, and record manual outcomes.
+        </Typography>
+      </Box>
 
-      {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Total Refunds"
-            value={stats.totalRefunds}
-            color="#3f51b5"
+            value={stats.total}
+            icon={PendingIcon}
+            loading={loading}
+            color={COLORS.info}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            title="Pending Amount"
-            value={`KES ${stats.pendingAmount.toLocaleString()}`}
-            color="#ff9800"
+            title="Active Amount"
+            value={formatCurrency(stats.activeAmount)}
+            subtitle={`${stats.activeCount} active requests`}
+            icon={PendingIcon}
+            loading={loading}
+            color={COLORS.pending}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Completed Amount"
-            value={`KES ${stats.completedAmount.toLocaleString()}`}
-            color="#4caf50"
+            value={formatCurrency(stats.completedAmount)}
+            icon={CheckCircleIcon}
+            loading={loading}
+            color={COLORS.success}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            title="Failed Refunds"
-            value={stats.failedCount}
-            color="#f44336"
+            title="Failed / Rejected"
+            value={`${stats.failedCount} / ${stats.rejectedCount}`}
+            icon={ErrorIcon}
+            loading={loading}
+            color={COLORS.error}
           />
         </Grid>
       </Grid>
 
-      {/* Filter Buttons */}
-      <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-        <Button
-          variant={statusFilter === '' ? 'contained' : 'outlined'}
-          onClick={() => handleStatusFilter('')}
-        >
-          All
-        </Button>
-        <Button
-          variant={statusFilter === 'pending' ? 'contained' : 'outlined'}
-          onClick={() => handleStatusFilter('pending')}
-        >
-          Pending
-        </Button>
-        <Button
-          variant={statusFilter === 'processing' ? 'contained' : 'outlined'}
-          onClick={() => handleStatusFilter('processing')}
-        >
-          Processing
-        </Button>
-        <Button
-          variant={statusFilter === 'completed' ? 'contained' : 'outlined'}
-          onClick={() => handleStatusFilter('completed')}
-        >
-          Completed
-        </Button>
-        <Button
-          variant={statusFilter === 'failed' ? 'contained' : 'outlined'}
-          onClick={() => handleStatusFilter('failed')}
-        >
-          Failed
-        </Button>
-      </Box>
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <TextField
+            select
+            size="small"
+            label="Status"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            sx={{ minWidth: 220 }}
+          >
+            <MenuItem value="all">All Statuses</MenuItem>
+            <MenuItem value="active">Pending / Processing</MenuItem>
+            <MenuItem value="pending">Pending</MenuItem>
+            <MenuItem value="processing">Processing</MenuItem>
+            <MenuItem value="completed">Completed</MenuItem>
+            <MenuItem value="failed">Failed</MenuItem>
+            <MenuItem value="rejected">Rejected</MenuItem>
+          </TextField>
+        </CardContent>
+      </Card>
 
-      {error && <Alert severity="error">{error}</Alert>}
+      <Card>
+        <CardContent>
+          <DataTable
+            columns={columns}
+            data={filteredRefunds}
+            loading={loading}
+            onRowClick={(refund) => {
+              setSelectedRefund(refund);
+              setDetailsOpen(true);
+            }}
+            emptyMessage="No refund records found"
+          />
+        </CardContent>
+      </Card>
 
-      {/* Refunds Table */}
-      <TableContainer component={Paper}>
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <>
-            <Table>
-              <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
-                <TableRow>
-                  <TableCell><strong>Refund ID</strong></TableCell>
-                  <TableCell><strong>Job ID</strong></TableCell>
-                  <TableCell align="right"><strong>Amount (KES)</strong></TableCell>
-                  <TableCell><strong>Status</strong></TableCell>
-                  <TableCell><strong>Reason</strong></TableCell>
-                  <TableCell><strong>Created</strong></TableCell>
-                  <TableCell align="center"><strong>Action</strong></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {refunds.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
-                      No refunds found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  refunds.map((refund) => (
-                    <TableRow key={refund.id} hover>
-                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                        {refund.refundId?.substring(0, 15)}...
-                      </TableCell>
-                      <TableCell>{refund.jobId?.substring(0, 12)}...</TableCell>
-                      <TableCell align="right">
-                        {refund.amount.toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={refund.status.toUpperCase()}
-                          color={getStatusColor(refund.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>{refund.reason}</TableCell>
-                      <TableCell>
-                        {refund.createdAt?.toDate?.()?.toLocaleDateString() ||
-                          new Date(refund.createdAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => handleViewDetails(refund)}
-                        >
-                          View
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-            <TablePagination
-              rowsPerPageOptions={[5, 10, 25, 50]}
-              component="div"
-              count={refunds.length}
-              rowsPerPage={rowsPerPage}
-              page={page}
-              onPageChange={(e, newPage) => setPage(newPage)}
-              onRowsPerPageChange={(e) => setRowsPerPage(parseInt(e.target.value, 10))}
-            />
-          </>
-        )}
-      </TableContainer>
-
-      {/* Details Dialog */}
-      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Refund Details</DialogTitle>
         <DialogContent>
           {selectedRefund && (
-            <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
               <Box>
-                <strong>Refund ID:</strong> {selectedRefund.refundId}
+                <Typography variant="body2" color="textSecondary">Refund ID</Typography>
+                <Typography variant="body1">{selectedRefund.refundId || selectedRefund.id}</Typography>
               </Box>
               <Box>
-                <strong>Job ID:</strong> {selectedRefund.jobId}
+                <Typography variant="body2" color="textSecondary">Transaction</Typography>
+                <Typography variant="body1">
+                  {selectedRefund.transactionId || selectedRefund.paystackReference || '-'}
+                </Typography>
               </Box>
               <Box>
-                <strong>Amount:</strong> KES {selectedRefund.amount.toLocaleString()}
+                <Typography variant="body2" color="textSecondary">Amount</Typography>
+                <Typography variant="h6">{formatCurrency(getRefundAmount(selectedRefund))}</Typography>
               </Box>
               <Box>
-                <strong>Status:</strong>{' '}
-                <Chip
-                  label={selectedRefund.status.toUpperCase()}
-                  color={getStatusColor(selectedRefund.status)}
-                  size="small"
-                />
+                <Typography variant="body2" color="textSecondary">Status</Typography>
+                <StatusBadge status={selectedRefund.status || 'pending'} variant="soft" />
               </Box>
               <Box>
-                <strong>Reason:</strong> {selectedRefund.reason}
+                <Typography variant="body2" color="textSecondary">Reason</Typography>
+                <Typography variant="body2">{selectedRefund.reason || '-'}</Typography>
               </Box>
               <Box>
-                <strong>Paystack Reference:</strong> {selectedRefund.paystackReference}
+                <Typography variant="body2" color="textSecondary">Created</Typography>
+                <Typography variant="body2">{formatDateTime(selectedRefund.createdAt)}</Typography>
               </Box>
               {selectedRefund.refundReference && (
                 <Box>
-                  <strong>Refund Reference:</strong> {selectedRefund.refundReference}
+                  <Typography variant="body2" color="textSecondary">Refund Reference</Typography>
+                  <Typography variant="body2">{selectedRefund.refundReference}</Typography>
                 </Box>
               )}
-              <Box>
-                <strong>Created:</strong>{' '}
-                {selectedRefund.createdAt?.toDate?.()?.toLocaleString() ||
-                  new Date(selectedRefund.createdAt).toLocaleString()}
-              </Box>
               {selectedRefund.failureReason && (
                 <Alert severity="error">
-                  <strong>Failure Reason:</strong> {selectedRefund.failureReason}
+                  <strong>Failure:</strong> {selectedRefund.failureReason}
+                </Alert>
+              )}
+              {selectedRefund.rejectionReason && (
+                <Alert severity="warning">
+                  <strong>Rejected:</strong> {selectedRefund.rejectionReason}
                 </Alert>
               )}
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          {selectedRefund?.status === 'failed' && selectedRefund?.attempts < selectedRefund?.maxAttempts && (
-            <Button
-              onClick={handleRetryRefund}
-              color="warning"
-              disabled={retryLoading}
-            >
-              {retryLoading ? <CircularProgress size={20} /> : 'Retry'}
-            </Button>
-          )}
-          
           {selectedRefund?.status === 'failed' && (
             <Button
-              onClick={() => setManualApprovalOpen(true)}
-              color="success"
+              startIcon={<RetryIcon />}
+              onClick={() => handleRetryRefund(selectedRefund)}
+              disabled={submitting}
             >
-              Manual Approval
+              Retry
             </Button>
           )}
-
+          {selectedRefund && activeRefundStatuses.includes(selectedRefund.status) && (
+            <>
+              <Button
+                color="error"
+                onClick={() => openDecision(selectedRefund, 'reject')}
+                disabled={submitting}
+              >
+                Reject
+              </Button>
+              <Button
+                color="success"
+                variant="contained"
+                onClick={() => openDecision(selectedRefund, 'complete')}
+                disabled={submitting}
+              >
+                Mark Complete
+              </Button>
+            </>
+          )}
           <Button onClick={() => setDetailsOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Manual Approval Dialog */}
-      <Dialog open={manualApprovalOpen} onClose={() => setManualApprovalOpen(false)} fullWidth>
-        <DialogTitle>Manually Approve Refund</DialogTitle>
+      <Dialog
+        open={decisionOpen}
+        onClose={closeDecision}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {decisionType === 'complete' ? 'Complete Refund' : 'Reject Refund'}
+        </DialogTitle>
         <DialogContent>
-          <Box sx={{ mt: 2 }}>
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              ⚠️ This will mark the refund as completed without verifying Paystack payment.
-              Only use if you've manually processed the refund.
-            </Alert>
-            <TextField
-              fullWidth
-              label="Approval Note"
-              placeholder="e.g., Manual bank transfer confirmed"
-              value={approvalNote}
-              onChange={(e) => setApprovalNote(e.target.value)}
-              multiline
-              rows={3}
-            />
-          </Box>
+          <Alert severity={decisionType === 'complete' ? 'warning' : 'info'} sx={{ mb: 2 }}>
+            {decisionType === 'complete'
+              ? 'Use this only after confirming the refund was processed outside the dashboard.'
+              : 'Rejecting will return the linked transaction to completed status when a transaction id is available.'}
+          </Alert>
+          <Divider sx={{ mb: 2 }} />
+          <TextField
+            fullWidth
+            multiline
+            rows={4}
+            label="Admin note"
+            value={decisionNote}
+            onChange={(event) => setDecisionNote(event.target.value)}
+          />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setManualApprovalOpen(false)}>Cancel</Button>
+          <Button onClick={closeDecision}>Cancel</Button>
           <Button
-            onClick={handleManualApproval}
-            color="success"
             variant="contained"
-            disabled={retryLoading || !approvalNote.trim()}
+            color={decisionType === 'complete' ? 'success' : 'error'}
+            onClick={handleDecision}
+            disabled={submitting || !decisionNote.trim()}
           >
-            {retryLoading ? <CircularProgress size={20} /> : 'Approve'}
+            {submitting ? <CircularProgress size={20} /> : 'Confirm'}
           </Button>
         </DialogActions>
       </Dialog>
     </Box>
   );
-};
-
-export default RefundsPage;
+}

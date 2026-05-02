@@ -36,7 +36,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       // Show configuration needed message
       _messages.add(
         ChatMessage(
-          text: " API key not configured. Please add your Google AI API key in lib/config/api_config.dart\n\nGet your free key at: https://makersuite.google.com/app/apikey",
+          text: " Error",
           isUser: false,
           timestamp: DateTime.now(),
         ),
@@ -71,7 +71,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     if (_aiService == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(' Please configure your Google AI API key first'),
+          content: Text(' Error: AI service is not configured. Please contact support.'),
           backgroundColor: Colors.orange,
         ),
       );

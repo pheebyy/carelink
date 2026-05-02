@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { db } from '../lib/firebase';
 import { collection, getDocs, query, where, updateDoc, doc } from 'firebase/firestore';
+import { showSuccess, showError } from '../lib/toast';
 import { DataTable } from '../components/DataTable';
 import { StatusBadge } from '../components/StatusBadge';
 import { StatCard } from '../components/StatCard';
@@ -31,6 +32,9 @@ import {
   Warning as WarningIcon,
   TrendingUp as TrendingUpIcon,
 } from '@mui/icons-material';
+
+const isPendingVerification = (status) =>
+  !status || status === 'pending' || status === 'pending_verification';
 
 export default function UsersPage() {
   const { canPerform } = useAdmin();
@@ -69,7 +73,7 @@ export default function UsersPage() {
           caregivers: usersList.filter(u => u.role === 'caregiver').length,
           clients: usersList.filter(u => u.role === 'client').length,
           verified: usersList.filter(u => u.verificationStatus === 'approved').length,
-          pending: usersList.filter(u => u.verificationStatus === 'pending_verification').length,
+          pending: usersList.filter(u => isPendingVerification(u.verificationStatus)).length,
           rejected: usersList.filter(u => u.verificationStatus === 'rejected').length,
         };
         
@@ -98,7 +102,9 @@ export default function UsersPage() {
     }
 
     // Status filter
-    if (statusFilter !== 'all') {
+    if (statusFilter === 'pending') {
+      filtered = filtered.filter((u) => isPendingVerification(u.verificationStatus));
+    } else if (statusFilter !== 'all') {
       filtered = filtered.filter((u) => u.verificationStatus === statusFilter);
     }
 
@@ -141,10 +147,10 @@ export default function UsersPage() {
       setOpenDetail(false);
       setSelectedUser(null);
       setActionReason('');
-      alert('Action completed successfully');
+      showSuccess('Action completed successfully');
     } catch (error) {
       console.error('Error performing action:', error);
-      alert('Error: ' + error.message);
+      showError('Error: ' + error.message);
     }
   };
 
@@ -314,7 +320,7 @@ export default function UsersPage() {
                 }}
               >
                 <MenuItem value="all">All Status</MenuItem>
-                <MenuItem value="pending_verification">Pending</MenuItem>
+                <MenuItem value="pending">Pending</MenuItem>
                 <MenuItem value="approved">Approved</MenuItem>
                 <MenuItem value="rejected">Rejected</MenuItem>
               </TextField>

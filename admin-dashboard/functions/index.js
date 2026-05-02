@@ -133,7 +133,7 @@ exports.verifyCaregiverUser = functions.https.onCall(async (data, context) => {
     };
 
     if (reason) {
-      updateData.verificationNotes = reason;
+      updateData.overallVerificationNotes = reason;
     }
 
     await db.collection('users').doc(userId).update(updateData);
@@ -144,11 +144,26 @@ exports.verifyCaregiverUser = functions.https.onCall(async (data, context) => {
       type: 'verification_status',
       title: approved ? 'Verification Approved!' : 'Verification Rejected',
       message: approved
-        ? 'Your verification has been approved. You can now post jobs.'
-        : `Your verification was rejected. ${reason || ''}`,
+        ? 'Your verification has been approved. You can now bid on jobs!'
+        : `Your verification was rejected. ${reason || 'Please contact support for details.'}`,
       read: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    // Send email notification
+    try {
+      console.log('📧 Sending verification result email...');
+      const callable = functions.httpsCallable('sendVerificationResultEmail');
+      const emailResult = await callable({
+        caregiverId: userId,
+        approved: approved,
+        reason: reason,
+      });
+      console.log('✅ Verification result email sent:', emailResult.data);
+    } catch (emailError) {
+      console.warn('⚠️  Email notification could not be sent:', emailError.message);
+      // Don't throw - email is not critical to verification
+    }
 
     await logAuditEvent(context.auth.uid, 'verify_caregiver_user', {
       affectedUserId: userId,
@@ -156,7 +171,7 @@ exports.verifyCaregiverUser = functions.https.onCall(async (data, context) => {
       reason,
     });
 
-    return { success: true };
+    return { success: true, message: approved ? 'Caregiver verified successfully' : 'Caregiver verification rejected' };
   } catch (error) {
     throw new functions.https.HttpsError('internal', error.message);
   }
