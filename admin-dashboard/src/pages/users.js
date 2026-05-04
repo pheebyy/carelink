@@ -231,7 +231,7 @@ export default function UsersPage() {
       </Box>
 
       {/* Statistics Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Total Users"
@@ -280,18 +280,19 @@ export default function UsersPage() {
           transition: TRANSITIONS.smooth,
         }}
       >
-        <CardContent>
+        <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
           <Typography
             variant="body2"
             sx={{
               fontWeight: 600,
               color: COLORS.gray900,
               mb: 2,
+              fontSize: { xs: '0.875rem', sm: '0.95rem' },
             }}
           >
             Filters
           </Typography>
-          <Grid container spacing={2}>
+          <Grid container spacing={{ xs: 1.5, sm: 2 }}>
             <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth

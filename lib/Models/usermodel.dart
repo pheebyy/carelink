@@ -11,6 +11,9 @@ class VerificationDocument {
   final String? verificationNotes;
   final Timestamp? verificationDate;
   final String? verificationMethod; // 'manual_board_lookup'
+  final Timestamp? expiryDate; // when the document expires
+  final bool expiryReminderSent; // track if reminder was sent
+  final Timestamp? lastReminderDate; // when the last reminder was sent
 
   VerificationDocument({
     required this.documentType,
@@ -23,6 +26,9 @@ class VerificationDocument {
     this.verificationNotes,
     this.verificationDate,
     this.verificationMethod,
+    this.expiryDate,
+    this.expiryReminderSent = false,
+    this.lastReminderDate,
   });
 
   factory VerificationDocument.fromMap(Map<String, dynamic> data) {
@@ -37,6 +43,9 @@ class VerificationDocument {
       verificationNotes: data['verificationNotes'],
       verificationDate: data['verificationDate'],
       verificationMethod: data['verificationMethod'],
+      expiryDate: data['expiryDate'],
+      expiryReminderSent: data['expiryReminderSent'] ?? false,
+      lastReminderDate: data['lastReminderDate'],
     );
   }
 
@@ -52,6 +61,9 @@ class VerificationDocument {
       'verificationNotes': verificationNotes,
       'verificationDate': verificationDate,
       'verificationMethod': verificationMethod,
+      'expiryDate': expiryDate,
+      'expiryReminderSent': expiryReminderSent,
+      'lastReminderDate': lastReminderDate,
     };
   }
 }

@@ -435,11 +435,9 @@ service cloud.firestore {
 
     // ========================= REFUNDS COLLECTION (Phase 2) =========================
     match /refunds/{refundId} {
-      // Admins can read all refunds
-      allow read: if isAdmin();
-      
-      // Clients can read their own refunds
-      allow read: if isAuthenticated() && resource.data.clientId == request.auth.uid;
+      // Admins can read all refunds, or clients can read their own refunds
+      allow read: if isAdmin() || 
+        (isAuthenticated() && resource.data.clientId == request.auth.uid);
 
       // Cloud Functions can create/update refunds (triggered by initiateInstantRefund)
       allow create, update: if !isAuthenticated();
@@ -481,6 +479,25 @@ service cloud.firestore {
       allow update: if isAdmin() || !isAuthenticated();
 
       // Never allow deletion
+      allow delete: if false;
+    }
+
+    // ========================= DISPUTES COLLECTION =========================
+    match /disputes/{disputeId} {
+      // Admins can read all disputes. Users can only read their own disputes.
+      allow read: if isAdmin() || 
+        (isAuthenticated() && 
+         (resource.data.get('raisedBy') == request.auth.uid ||
+          resource.data.get('raisedAgainst') == request.auth.uid));
+
+      // Authenticated users can file disputes
+      allow create: if isAuthenticated() && 
+        request.resource.data.raisedBy == request.auth.uid;
+
+      // Admins can update/resolve disputes
+      allow update: if isAdmin();
+
+      // Never allow deletion (audit trail)
       allow delete: if false;
     }
 

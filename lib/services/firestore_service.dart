@@ -49,11 +49,11 @@ class FirestoreService {
   }
 
   // ========================= VERIFICATION =========================
-  /// Submit verification documents for caregiver
-  /// documents: List of maps with: {documentType, storageUrl, fileName, documentValue}
+  /// Submits verification documents for caregiver
+  /// documents: List of maps with: {documentType, storageUrl, fileName, documentValue, expiryDate?}
   Future<void> submitVerificationDocuments({
     required String caregiverId,
-    required List<Map<String, String>> documents,
+    required List<Map<String, dynamic>> documents,
   }) async {
     try {
       if (caregiverId.isEmpty) throw Exception("Caregiver ID is required");
@@ -69,6 +69,7 @@ class FirestoreService {
                 'uploadedAt': FieldValue.serverTimestamp(),
                 'documentValue': doc['documentValue'] ?? '',
                 'status': 'submitted',
+                'expiryDate': doc['expiryDate'], // Add expiry date if provided
               })
           .toList();
 
@@ -155,7 +156,7 @@ class FirestoreService {
       });
       return ref.id;
     } catch (e) {
-      print('🔥 Error creating job: $e');
+      print(' Error creating job: $e');
       rethrow;
     }
   }
@@ -237,7 +238,7 @@ class FirestoreService {
 
       return ref.id;
     } catch (e) {
-      print('🔥 Error creating application: $e');
+      print(' Error creating application: $e');
       rethrow;
     }
   }
@@ -251,7 +252,7 @@ class FirestoreService {
     int? estimatedDuration, // in hours
   }) async {
     try {
-      print('\n🔵 ===== BID CREATION STARTED =====');
+      print('\n ===== BID CREATION STARTED =====');
       print('   JobID: $jobId');
       print('   CaregiverID: $caregiverId');
       print('   Amount: $amount');
@@ -267,10 +268,10 @@ class FirestoreService {
         throw Exception("Bid amount must be greater than 0");
       }
 
-      print('✅ Input validation passed');
+      print(' Input validation passed');
 
-      // ✅ VERIFICATION GATE: Check if caregiver is verified
-      print('🔍 Checking caregiver verification status...');
+      //  VERIFICATION GATE: Check if caregiver is verified
+      print(' Checking caregiver verification status...');
       final caregiverSnap = await _db.collection('users').doc(caregiverId).get();
       if (!caregiverSnap.exists) {
         throw Exception("❌ Caregiver not found in users collection");
@@ -286,36 +287,36 @@ class FirestoreService {
       final hasDocuments = hasSubmittedDocuments || isVerified;
       
       if (!hasDocuments && verificationStatus != 'approved') {
-        throw Exception('❌ You must complete verification to bid on jobs. Status: $verificationStatus. Please submit your verification documents.');
+        throw Exception(' You must complete verification to bid on jobs. Status: $verificationStatus. Please submit your verification documents.');
       }
       
       if (verificationStatus == 'pending') {
-        print('⚠️  Verification pending - but allowing bid since documents submitted');
+        print('  Verification pending - but allowing bid since documents submitted');
       }
       
-      print('✅ Caregiver verified (or documents submitted)');
+      print(' Caregiver verified (or documents submitted)');
 
       final jobRef = _db.collection('jobs').doc(jobId);
       // Enforce one bid per caregiver by using caregiverId as bid document id.
       final bidRef = jobRef.collection('bids').doc(caregiverId);
 
-      // ✅ Fetch job data and caregiver name for notification
+      //  Fetch job data and caregiver name for notification
       final jobDoc = await jobRef.get();
       if (!jobDoc.exists) {
-        throw Exception("❌ Job not found");
+        throw Exception(" Job not found");
       }
       final jobData = jobDoc.data() ?? <String, dynamic>{};
       final jobTitle = jobData['title'] ?? 'Job';
       final clientId = jobData['clientId'] ?? '';
       final caregiverName = caregiverData['fullName'] ?? caregiverData['name'] ?? 'A caregiver';
 
-      print('🔍 Starting transaction...');
+      print(' Starting transaction...');
       await _db.runTransaction((txn) async {
         final jobSnap = await txn.get(jobRef);
         if (!jobSnap.exists) {
-          throw Exception("❌ Job not found");
+          throw Exception(" Job not found");
         }
-        print('✅ Job found');
+        print(' Job found');
 
         final jobData = jobSnap.data() ?? <String, dynamic>{};
         final jobStatus = (jobData['status'] ?? '').toString().toLowerCase();
@@ -343,9 +344,9 @@ class FirestoreService {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        print('✅ Bid written to transaction');
+        print(' Bid written to transaction');
 
-        // ✅ UPDATE JOB DOCUMENT: Track bid metadata so client is notified
+        //  UPDATE JOB DOCUMENT: Track bid metadata so client is notified
         print('💾 Updating job with bid metadata...');
         txn.update(jobRef, {
           'hasPendingBids': true,

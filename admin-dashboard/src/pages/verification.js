@@ -42,6 +42,27 @@ import { showSuccess, showError } from '../lib/toast';
 const isPendingVerification = (status) =>
   !status || status === 'pending' || status === 'pending_verification';
 
+// Helper function to get expiry status and color
+const getExpiryStatus = (expiryDate) => {
+  if (!expiryDate) return { status: 'No Expiry', color: 'default' };
+
+  const now = new Date();
+  const expiry = expiryDate.toDate ? expiryDate.toDate() : new Date(expiryDate);
+  const daysUntilExpiry = Math.ceil((expiry.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+
+  if (daysUntilExpiry < 0) {
+    return { status: 'Expired', color: 'error' };
+  } else if (daysUntilExpiry <= 7) {
+    return { status: `${daysUntilExpiry} days`, color: 'error' };
+  } else if (daysUntilExpiry <= 14) {
+    return { status: `${daysUntilExpiry} days`, color: 'warning' };
+  } else if (daysUntilExpiry <= 30) {
+    return { status: `${daysUntilExpiry} days`, color: 'warning' };
+  } else {
+    return { status: `${daysUntilExpiry} days`, color: 'success' };
+  }
+};
+
 function a11yProps(index) {
   return {
     id: `verification-tab-${index}`,
@@ -392,33 +413,64 @@ export default function VerificationPage() {
                       <TableCell sx={{ fontWeight: 'bold' }}>
                         Approved Date
                       </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>
+                        Document Expiry
+                      </TableCell>
                       <TableCell sx={{ fontWeight: 'bold' }} align="right">
                         Status
                       </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredCaregivers.map((caregiver) => (
-                      <TableRow key={caregiver.id}>
-                        <TableCell>{caregiver.name || '-'}</TableCell>
-                        <TableCell>{caregiver.email}</TableCell>
-                        <TableCell>
-                          {caregiver.verificationApprovedAt
-                            ? new Date(
-                                caregiver.verificationApprovedAt.toDate?.() ||
-                                  caregiver.verificationApprovedAt
-                              ).toLocaleDateString()
-                            : '-'}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Chip
-                            label="✓ Verified"
-                            color="success"
-                            variant="outlined"
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filteredCaregivers.map((caregiver) => {
+                      // Find the earliest expiring document
+                      const expiringDocs = caregiver.verificationDocuments?.filter(doc => doc.expiryDate && doc.status === 'approved') || [];
+                      const earliestExpiry = expiringDocs.length > 0
+                        ? expiringDocs.reduce((earliest, doc) =>
+                            (!earliest || (doc.expiryDate.toDate ? doc.expiryDate.toDate() : new Date(doc.expiryDate)) < earliest)
+                              ? (doc.expiryDate.toDate ? doc.expiryDate.toDate() : new Date(doc.expiryDate))
+                              : earliest
+                          , null)
+                        : null;
+
+                      const expiryInfo = getExpiryStatus(earliestExpiry);
+
+                      return (
+                        <TableRow key={caregiver.id}>
+                          <TableCell>{caregiver.name || '-'}</TableCell>
+                          <TableCell>{caregiver.email}</TableCell>
+                          <TableCell>
+                            {caregiver.verificationApprovedAt
+                              ? new Date(
+                                  caregiver.verificationApprovedAt.toDate?.() ||
+                                    caregiver.verificationApprovedAt
+                                ).toLocaleDateString()
+                              : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {earliestExpiry ? (
+                              <Chip
+                                label={expiryInfo.status}
+                                color={expiryInfo.color}
+                                size="small"
+                                variant="outlined"
+                              />
+                            ) : (
+                              <Typography variant="body2" color="textSecondary">
+                                No expiry dates
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell align="right">
+                            <Chip
+                              label="✓ Verified"
+                              color="success"
+                              variant="outlined"
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -507,7 +559,7 @@ export default function VerificationPage() {
                           <Grid item xs={12} sm={9}>
                             <Box>
                               <Typography variant="subtitle2">
-                                {doc.documentType}
+                                {doc.documentType.replace('_', ' ').toUpperCase()}
                               </Typography>
                               <Typography variant="body2" color="textSecondary">
                                 Value: {doc.documentValue}
@@ -518,6 +570,25 @@ export default function VerificationPage() {
                                   doc.uploadedAt.toDate?.() || doc.uploadedAt
                                 ).toLocaleDateString()}
                               </Typography>
+                              {doc.expiryDate && (
+                                <Typography variant="caption" color="textSecondary" sx={{ display: 'block' }}>
+                                  Expires:{' '}
+                                  {new Date(
+                                    doc.expiryDate.toDate?.() || doc.expiryDate
+                                  ).toLocaleDateString()}
+                                  {(() => {
+                                    const expiryInfo = getExpiryStatus(doc.expiryDate);
+                                    return expiryInfo.color !== 'success' ? (
+                                      <Chip
+                                        label={expiryInfo.status}
+                                        color={expiryInfo.color}
+                                        size="small"
+                                        sx={{ ml: 1, fontSize: '0.7rem', height: '16px' }}
+                                      />
+                                    ) : null;
+                                  })()}
+                                </Typography>
+                              )}
                             </Box>
                           </Grid>
                         </Grid>

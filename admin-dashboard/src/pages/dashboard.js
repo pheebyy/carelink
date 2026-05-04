@@ -83,14 +83,14 @@ export default function Dashboard() {
     const handleSnapshotError = (label) => (error) => {
       console.error(`Dashboard ${label} listener error:`, error);
       setDashboardError(
-        `Some dashboard data could not be loaded (${label}). Check admin Firestore permissions.`
+        `Some dashboard data could not be loaded (${label}). Check permissions.`
       );
       setLoading(false);
     };
 
-    // Subscribe to users collection
+    // Subscribe to users collection - limit to reduce load
     const usersUnsub = onSnapshot(
-      collection(db, 'users'),
+      query(collection(db, 'users'), limit(500)),
       (snapshot) => {
         const totalUsers = snapshot.size;
         const pendingApprovalsCount = snapshot.docs.filter(
@@ -107,9 +107,9 @@ export default function Dashboard() {
     );
     unsubscribers.push(usersUnsub);
 
-    // Subscribe to jobs collection
+    // Subscribe to jobs collection - limit to reduce load
     const jobsUnsub = onSnapshot(
-      collection(db, 'jobs'),
+      query(collection(db, 'jobs'), limit(500)),
       (snapshot) => {
         const totalJobs = snapshot.size;
         const activeJobs = snapshot.docs.filter(
@@ -142,7 +142,7 @@ export default function Dashboard() {
 
     // Subscribe to transactions collection used by the Flutter payment flow.
     const transactionsUnsub = onSnapshot(
-      collection(db, 'transactions'),
+      query(collection(db, 'transactions'), limit(500)),
       (snapshot) => {
         const totalRevenue = snapshot.docs
           .filter((doc) => doc.data().status === 'completed')
@@ -185,7 +185,7 @@ export default function Dashboard() {
     unsubscribers.push(transactionsUnsub);
 
     const disputesUnsub = onSnapshot(
-      collection(db, 'disputes'),
+      query(collection(db, 'disputes'), limit(500)),
       (snapshot) => {
         const openDisputes = snapshot.docs.filter(
           (doc) => isOpenDispute(doc.data().status)
@@ -201,7 +201,7 @@ export default function Dashboard() {
     unsubscribers.push(disputesUnsub);
 
     const refundsUnsub = onSnapshot(
-      collection(db, 'refunds'),
+      query(collection(db, 'refunds'), limit(500)),
       (snapshot) => {
         const pendingRefunds = snapshot.docs.filter(
           (doc) => isActiveRefund(doc.data().status)
@@ -263,13 +263,14 @@ export default function Dashboard() {
   return (
     <Box sx={{ animation: 'fadeIn 0.3s ease-in-out' }}>
       {/* Page Header */}
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
         <Typography
           variant="h3"
           sx={{
             fontWeight: 700,
             color: COLORS.gray900,
             mb: 0.5,
+            fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' },
           }}
         >
           Dashboard
@@ -278,6 +279,7 @@ export default function Dashboard() {
           variant="body2"
           sx={{
             color: COLORS.gray600,
+            fontSize: { xs: '0.85rem', sm: '0.95rem' },
           }}
         >
           Welcome back! Here's what's happening with your platform today.
@@ -291,7 +293,7 @@ export default function Dashboard() {
       )}
 
       {/* Key Performance Indicators */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Total Users"
@@ -337,7 +339,7 @@ export default function Dashboard() {
       </Grid>
 
       {/* Charts Section */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
         {/* Revenue & Activity Timeline */}
         <Grid item xs={12} md={8}>
           <Card

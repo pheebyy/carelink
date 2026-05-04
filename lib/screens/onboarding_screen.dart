@@ -54,7 +54,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           _IntroScreen(
             index: 2,
-            imagePath: 'assets/disabled children.jpg',
+            imagePath: 'assets/home5.jpeg',
             title: 'Make a Difference',
             description:
                 'Build meaningful connections and provide exceptional care services.',

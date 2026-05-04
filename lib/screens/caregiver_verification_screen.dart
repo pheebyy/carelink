@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/storage_service.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
@@ -151,7 +152,7 @@ class _CaregiverVerificationScreenState
       }
 
       final uid = user.uid;
-      final List<Map<String, String>> uploadedDocs = [];
+      final List<Map<String, dynamic>> uploadedDocs = [];
 
       print('🚀 Beginning document upload process for user: $uid');
       
@@ -165,13 +166,14 @@ class _CaregiverVerificationScreenState
           fileExtension: 'jpg',
           contentType: 'image/jpeg',
         );
-        uploadedDocs.add({
+        final Map<String, dynamic> licenseDoc = {
           'documentType': 'practice_license',
           'storageUrl': licenseResult['storageUrl']!,
           'fileName': licenseResult['fileName']!,
           'documentValue': _licenseNumberCtrl.text.trim(),
           'expiryDate': Timestamp.fromDate(_licenseExpiryDate!),
-        });
+        };
+        uploadedDocs.add(licenseDoc);
         print('✅ Practice license uploaded successfully');
       } catch (e) {
         print('🔥 Practice license upload failed: $e');
@@ -188,13 +190,14 @@ class _CaregiverVerificationScreenState
           fileExtension: 'jpg',
           contentType: 'image/jpeg',
         );
-        uploadedDocs.add({
+        final Map<String, dynamic> idDoc = {
           'documentType': 'national_id',
           'storageUrl': idResult['storageUrl']!,
           'fileName': idResult['fileName']!,
           'documentValue': _idNumberCtrl.text.trim(),
           'expiryDate': Timestamp.fromDate(_idExpiryDate!),
-        });
+        };
+        uploadedDocs.add(idDoc);
         print('✅ National ID uploaded successfully');
       } catch (e) {
         print('🔥 National ID upload failed: $e');

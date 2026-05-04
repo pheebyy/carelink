@@ -5,6 +5,8 @@ import {
   Typography,
   Box,
   CircularProgress,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import { COLORS, SHADOWS, TRANSITIONS } from '../lib/themeConstants';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
@@ -19,6 +21,9 @@ export const StatCard = ({
   trend,
   subtitle,
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
   const iconBackgroundColor = (() => {
     // map color to lighter variant
     const colorMap = {
@@ -52,11 +57,11 @@ export const StatCard = ({
         },
         '&:hover': {
           boxShadow: SHADOWS.lg,
-          transform: 'translateY(-2px)',
+          transform: isMobile ? 'none' : 'translateY(-2px)',
         },
       }}
     >
-      <CardContent sx={{ flex: 1 }}>
+      <CardContent sx={{ flex: 1, p: { xs: 1.5, sm: 2 } }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box sx={{ flex: 1 }}>
             <Typography
@@ -64,9 +69,10 @@ export const StatCard = ({
               sx={{
                 color: COLORS.gray600,
                 fontWeight: 500,
-                fontSize: '0.875rem',
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
                 letterSpacing: '0.3px',
                 mb: 1,
+                textTransform: 'uppercase',
               }}
             >
               {title}
@@ -74,7 +80,7 @@ export const StatCard = ({
 
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 1.5 }}>
               {loading ? (
-                <CircularProgress size={24} sx={{ color: color }} />
+                <CircularProgress size={isMobile ? 20 : 24} sx={{ color: color }} />
               ) : (
                 <Typography
                   variant="h4"
@@ -82,6 +88,7 @@ export const StatCard = ({
                     fontWeight: 700,
                     color: COLORS.gray900,
                     letterSpacing: '-0.5px',
+                    fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' },
                   }}
                 >
                   {value}
@@ -96,6 +103,7 @@ export const StatCard = ({
                   color: COLORS.gray600,
                   display: 'block',
                   mb: 0.5,
+                  fontSize: { xs: '0.7rem', sm: '0.75rem' },
                 }}
               >
                 {subtitle}
@@ -112,15 +120,16 @@ export const StatCard = ({
                 }}
               >
                 {trend > 0 ? (
-                  <TrendingUpIcon sx={{ fontSize: '1rem', color: COLORS.success }} />
+                  <TrendingUpIcon sx={{ fontSize: { xs: '0.875rem', sm: '1rem' }, color: COLORS.success }} />
                 ) : (
-                  <TrendingDownIcon sx={{ fontSize: '1rem', color: COLORS.error }} />
+                  <TrendingDownIcon sx={{ fontSize: { xs: '0.875rem', sm: '1rem' }, color: COLORS.error }} />
                 )}
                 <Typography
                   variant="caption"
                   sx={{
                     color: trend > 0 ? COLORS.success : COLORS.error,
                     fontWeight: 600,
+                    fontSize: { xs: '0.65rem', sm: '0.75rem' },
                   }}
                 >
                   {Math.abs(trend)}% from last month
@@ -134,19 +143,20 @@ export const StatCard = ({
               sx={{
                 backgroundColor: iconBackgroundColor,
                 borderRadius: '12px',
-                p: 1.5,
+                p: { xs: 1, sm: 1.5 },
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                minWidth: '56px',
-                height: '56px',
-                ml: 2,
+                minWidth: { xs: '44px', sm: '56px' },
+                height: { xs: '44px', sm: '56px' },
+                ml: 1,
+                flexShrink: 0,
               }}
             >
               <IconComponent
                 sx={{
                   color: color,
-                  fontSize: 28,
+                  fontSize: { xs: 20, sm: 28 },
                 }}
               />
             </Box>

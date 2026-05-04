@@ -1598,6 +1598,134 @@ exports.initiateInstantRefund = onCall(async (request) => {
   }
 });
 
+// ==========================================
+// 📄 DOCUMENT EXPIRY MONITORING SYSTEM
+// ==========================================
+
+/**
+ * Check for expiring verification documents and send reminders
+ * Runs daily at 9 AM UTC (2 PM EAT)
+ * Sends reminders at 30, 14, and 7 days before expiry
+ */
+exports.checkExpiringDocuments = onSchedule(
+  {
+    schedule: "0 9 * * *", // 9 AM UTC (2 PM EAT) every day
+    timeZone: "UTC",
+    retryCount: 2,
+    maxInstances: 1,
+  },
+  async (context) => {
+    console.log("🔍 Checking for expiring verification documents...");
+
+    try {
+      const now = new Date();
+      const thirtyDaysFromNow = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000));
+      const fourteenDaysFromNow = new Date(now.getTime() + (14 * 24 * 60 * 60 * 1000));
+      const sevenDaysFromNow = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000));
+
+      // Get all users with verification documents
+      const usersSnapshot = await db.collection("users").get();
+      let totalChecked = 0;
+      let remindersSent = 0;
+
+      for (const userDoc of usersSnapshot.docs) {
+        const userData = userDoc.data();
+        const userId = userDoc.id;
+        const email = userData.email;
+        const name = userData.name || "Caregiver";
+
+        if (!userData.verificationDocuments || userData.verificationDocuments.length === 0) {
+          continue;
+        }
+
+        totalChecked++;
+
+        for (const doc of userData.verificationDocuments) {
+          if (!doc.expiryDate || doc.status !== 'approved') {
+            continue; // Skip documents without expiry or not approved
+          }
+
+          const expiryDate = doc.expiryDate.toDate();
+          const daysUntilExpiry = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+
+          // Check if reminder should be sent
+          let shouldSendReminder = false;
+          let reminderType = '';
+
+          if (daysUntilExpiry <= 7 && daysUntilExpiry > 0 && !doc.expiryReminderSent) {
+            shouldSendReminder = true;
+            reminderType = '7-day';
+          } else if (daysUntilExpiry <= 14 && daysUntilExpiry > 7 && !doc.expiryReminderSent) {
+            shouldSendReminder = true;
+            reminderType = '14-day';
+          } else if (daysUntilExpiry <= 30 && daysUntilExpiry > 14 && !doc.expiryReminderSent) {
+            shouldSendReminder = true;
+            reminderType = '30-day';
+          }
+
+          if (shouldSendReminder && email) {
+            try {
+              // Send reminder email
+              const subject = `Document Expiry Reminder - ${doc.documentType.replace('_', ' ').toUpperCase()}`;
+              const htmlContent = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #d32f2f;">Document Expiry Alert</h2>
+                  <p>Dear ${name},</p>
+                  <p>Your <strong>${doc.documentType.replace('_', ' ')}</strong> is expiring in <strong>${daysUntilExpiry} days</strong> (${expiryDate.toDateString()}).</p>
+                  <p>Please renew your document and submit the updated version through the CareLink app to continue providing services.</p>
+                  <div style="background-color: #fff3e0; padding: 15px; border-left: 4px solid #ff9800; margin: 20px 0;">
+                    <h3 style="margin-top: 0; color: #e65100;">Action Required:</h3>
+                    <ol>
+                      <li>Renew your ${doc.documentType.replace('_', ' ')} with the relevant authority</li>
+                      <li>Take a clear photo of the renewed document</li>
+                      <li>Submit the new document through the CareLink verification section</li>
+                    </ol>
+                  </div>
+                  <p>If you have any questions, please contact our support team.</p>
+                  <p>Best regards,<br>CareLink Team</p>
+                </div>
+              `;
+
+              await sendEmail(email, subject, htmlContent);
+
+              // Update document to mark reminder as sent
+              const updatedDocs = userData.verificationDocuments.map(d =>
+                d.documentType === doc.documentType && d.documentValue === doc.documentValue
+                  ? { ...d, expiryReminderSent: true, lastReminderDate: admin.firestore.FieldValue.serverTimestamp() }
+                  : d
+              );
+
+              await db.collection("users").doc(userId).update({
+                verificationDocuments: updatedDocs
+              });
+
+              remindersSent++;
+              console.log(`📧 Reminder sent to ${email} for ${doc.documentType} (${reminderType})`);
+
+            } catch (emailError) {
+              console.error(`❌ Failed to send reminder email to ${email}:`, emailError);
+            }
+          }
+        }
+      }
+
+      console.log(`✅ Document expiry check completed:`);
+      console.log(`   - Users checked: ${totalChecked}`);
+      console.log(`   - Reminders sent: ${remindersSent}`);
+
+      return {
+        success: true,
+        usersChecked: totalChecked,
+        remindersSent: remindersSent,
+      };
+
+    } catch (error) {
+      console.error("❌ Error checking expiring documents:", error);
+      throw error;
+    }
+  }
+);
+
 /**
  * Get refund details (Admin API)
  */

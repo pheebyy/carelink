@@ -15,53 +15,90 @@ export const AdminProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
-        try {
-          // Get admin document and custom claims
-          const idTokenResult = await currentUser.getIdTokenResult(true);
+        // Get claims from cached token (don't force refresh)
+        currentUser.getIdTokenResult(false).then((idTokenResult) => {
           const adminRoleFromClaims = idTokenResult.claims.admin_role;
           const adminClaim = idTokenResult.claims.admin;
-          
-          // Try to get admin document from admins collection first
-          let adminDoc = await getDoc(doc(db, 'admins', currentUser.uid));
-          
-          // If not found in admins collection, check users collection for backward compatibility
-          if (!adminDoc.exists()) {
-            const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-            if (userDoc.exists() && (userDoc.data().role === 'admin' || adminClaim === true)) {
-              // Create admin document in admins collection for migration
-              const adminData = {
-                email: currentUser.email,
-                role: adminRoleFromClaims || 'superadmin', // Default to superadmin for bootstrapped admins
-                permissions: {}, // Will be filled based on role
-                migratedFrom: 'users',
-                createdAt: new Date(),
-              };
-              await setDoc(doc(db, 'admins', currentUser.uid), adminData);
-              adminDoc = await getDoc(doc(db, 'admins', currentUser.uid));
-            }
+
+          // Quick check: if not admin in claims, reject immediately
+          if (!adminClaim && !adminRoleFromClaims) {
+            setError('Not an admin user');
+            setUser(null);
+            setLoading(false);
+            auth.signOut();
+            return;
           }
 
-          if (adminDoc.exists() && (adminRoleFromClaims || adminClaim === true)) {
-            const adminData = adminDoc.data();
-            setUser(currentUser);
-            setAdminRole(adminRoleFromClaims || adminData.role || 'admin');
-            setPermissions(adminData.permissions || {});
-          } else {
-            setError('Not an admin user');
-            await auth.signOut();
-          }
-        } catch (err) {
-          setError(err.message);
-          console.error('Admin verification error:', err);
-        }
+          // Fetch admin document
+          getDoc(doc(db, 'admins', currentUser.uid))
+            .then((adminDoc) => {
+              if (adminDoc.exists() && (adminRoleFromClaims || adminClaim === true)) {
+                const adminData = adminDoc.data();
+                setUser(currentUser);
+                setAdminRole(adminRoleFromClaims || adminData.role || 'admin');
+                setPermissions(adminData.permissions || {});
+                setError(null);
+                setLoading(false);
+              } else {
+                // Try backward compatibility check
+                getDoc(doc(db, 'users', currentUser.uid))
+                  .then((userDoc) => {
+                    if (userDoc.exists() && (userDoc.data().role === 'admin' || adminClaim === true)) {
+                      // Create admin doc in background
+                      const adminData = {
+                        email: currentUser.email,
+                        role: adminRoleFromClaims || 'superadmin',
+                        permissions: {},
+                        migratedFrom: 'users',
+                        createdAt: new Date(),
+                      };
+                      setDoc(doc(db, 'admins', currentUser.uid), adminData)
+                        .then(() => {
+                          setUser(currentUser);
+                          setAdminRole(adminRoleFromClaims || 'superadmin');
+                          setPermissions({});
+                          setError(null);
+                          setLoading(false);
+                        })
+                        .catch((err) => {
+                          setError('Failed to create admin document');
+                          setUser(null);
+                          setLoading(false);
+                        });
+                    } else {
+                      setError('Not an admin user');
+                      setUser(null);
+                      setLoading(false);
+                      auth.signOut();
+                    }
+                  })
+                  .catch(() => {
+                    setError('Not an admin user');
+                    setUser(null);
+                    setLoading(false);
+                    auth.signOut();
+                  });
+              }
+            })
+            .catch((err) => {
+              setError('Admin verification failed: ' + err.message);
+              setUser(null);
+              setLoading(false);
+            });
+        }).catch((err) => {
+          setError('Token retrieval failed: ' + err.message);
+          setUser(null);
+          setLoading(false);
+        });
       } else {
         setUser(null);
         setAdminRole(null);
         setPermissions({});
+        setError(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();

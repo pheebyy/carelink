@@ -10,6 +10,15 @@ import Layout from '../components/Layout';
 
 // Enhanced theme with professional SaaS design system
 const theme = createTheme({
+  breakpoints: {
+    values: {
+      xs: 0,
+      sm: 600,
+      md: 960,
+      lg: 1280,
+      xl: 1920,
+    },
+  },
   palette: {
     primary: {
       main: '#4CAF50',
@@ -262,6 +271,14 @@ const theme = createTheme({
           borderRadius: 6,
           fontWeight: 500,
           fontSize: '0.75rem',
+        },
+      },
+    },
+    MuiContainer: {
+      styleOverrides: {
+        root: {
+          paddingLeft: 'clamp(12px, 2vw, 24px)',
+          paddingRight: 'clamp(12px, 2vw, 24px)',
         },
       },
     },
