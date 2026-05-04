@@ -24,6 +24,12 @@ class _CaregiverVerificationScreenState
   final _licenseNumberCtrl = TextEditingController();
   final _idNumberCtrl = TextEditingController();
   final _passportNumberCtrl = TextEditingController();
+  final _licenseExpiryCtrl = TextEditingController();
+  final _idExpiryCtrl = TextEditingController();
+
+  // Expiry dates
+  DateTime? _licenseExpiryDate;
+  DateTime? _idExpiryDate;
 
   // File holders
   File? _licenseFile;
@@ -39,7 +45,33 @@ class _CaregiverVerificationScreenState
     _licenseNumberCtrl.dispose();
     _idNumberCtrl.dispose();
     _passportNumberCtrl.dispose();
+    _licenseExpiryCtrl.dispose();
+    _idExpiryCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickExpiryDate(String documentType) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
+    );
+
+    if (picked != null) {
+      setState(() {
+        switch (documentType) {
+          case 'practice_license':
+            _licenseExpiryDate = picked;
+            _licenseExpiryCtrl.text = '${picked.day}/${picked.month}/${picked.year}';
+            break;
+          case 'national_id':
+            _idExpiryDate = picked;
+            _idExpiryCtrl.text = '${picked.day}/${picked.month}/${picked.year}';
+            break;
+        }
+      });
+    }
   }
 
   Future<void> _pickFile(String documentType) async {
@@ -83,6 +115,10 @@ class _CaregiverVerificationScreenState
           _errorMessage = 'Practice license document is required');
       return;
     }
+    if (_licenseExpiryDate == null) {
+      setState(() => _errorMessage = 'Practice license expiry date is required');
+      return;
+    }
 
     if (_idNumberCtrl.text.isEmpty) {
       setState(() => _errorMessage = 'ID number is required');
@@ -90,6 +126,10 @@ class _CaregiverVerificationScreenState
     }
     if (_idFile == null) {
       setState(() => _errorMessage = 'National ID document is required');
+      return;
+    }
+    if (_idExpiryDate == null) {
+      setState(() => _errorMessage = 'National ID expiry date is required');
       return;
     }
 
@@ -130,6 +170,7 @@ class _CaregiverVerificationScreenState
           'storageUrl': licenseResult['storageUrl']!,
           'fileName': licenseResult['fileName']!,
           'documentValue': _licenseNumberCtrl.text.trim(),
+          'expiryDate': Timestamp.fromDate(_licenseExpiryDate!),
         });
         print('✅ Practice license uploaded successfully');
       } catch (e) {
@@ -152,6 +193,7 @@ class _CaregiverVerificationScreenState
           'storageUrl': idResult['storageUrl']!,
           'fileName': idResult['fileName']!,
           'documentValue': _idNumberCtrl.text.trim(),
+          'expiryDate': Timestamp.fromDate(_idExpiryDate!),
         });
         print('✅ National ID uploaded successfully');
       } catch (e) {
@@ -230,6 +272,9 @@ class _CaregiverVerificationScreenState
     required TextEditingController numberController,
     required File? selectedFile,
     required String numberLabel,
+    bool requiresExpiry = false,
+    TextEditingController? expiryController,
+    VoidCallback? onExpiryTap,
   }) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 12),
@@ -255,6 +300,21 @@ class _CaregiverVerificationScreenState
                 prefixIcon: const Icon(Icons.info),
               ),
             ),
+            if (requiresExpiry) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: expiryController,
+                readOnly: true,
+                onTap: onExpiryTap,
+                decoration: InputDecoration(
+                  labelText: 'Expiry Date',
+                  hintText: 'Select expiry date',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.calendar_today),
+                  suffixIcon: const Icon(Icons.arrow_drop_down),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             GestureDetector(
               onTap: () => _pickFile(documentType),
@@ -404,6 +464,9 @@ class _CaregiverVerificationScreenState
               numberController: _licenseNumberCtrl,
               selectedFile: _licenseFile,
               numberLabel: 'License Number/ID',
+              requiresExpiry: true,
+              expiryController: _licenseExpiryCtrl,
+              onExpiryTap: () => _pickExpiryDate('practice_license'),
             ),
             _buildDocumentSection(
               title: '2. National ID',
@@ -411,6 +474,9 @@ class _CaregiverVerificationScreenState
               numberController: _idNumberCtrl,
               selectedFile: _idFile,
               numberLabel: 'ID Number',
+              requiresExpiry: true,
+              expiryController: _idExpiryCtrl,
+              onExpiryTap: () => _pickExpiryDate('national_id'),
             ),
             _buildDocumentSection(
               title: '3. Passport Photo',
