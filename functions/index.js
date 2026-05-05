@@ -1,3 +1,4 @@
+
 const functions = require("firebase-functions/v2");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
@@ -658,36 +659,105 @@ exports.getWithdrawalHistory = onCall(async (request) => {
 // 📧 EMAIL NOTIFICATIONS
 // ==========================================
 
-// Helper: Send email via SendGrid (add SendGrid API key to .env)
-async function sendEmail(to, subject, htmlContent) {
+// Notifications: create in-app notification and send push via FCM
+async function createNotificationAndPush({ userId, email, payload }) {
   try {
-    const sendgridApiKey = process.env.SENDGRID_API_KEY;
-    if (!sendgridApiKey) {
-      console.log("⚠️  SendGrid not configured, skipping email:", subject);
-      return { success: false, reason: "sendgrid_not_configured" };
+    let targetUserId = userId;
+
+    if (!targetUserId && email) {
+      // Try to find user by email
+      const userQuery = await db.collection('users').where('email', '==', email).limit(1).get();
+      if (!userQuery.empty) {
+        targetUserId = userQuery.docs[0].id;
+      }
     }
 
-    const url = "https://api.sendgrid.com/v3/mail/send";
-    const headers = {
-      Authorization: `Bearer ${sendgridApiKey}`,
-      "Content-Type": "application/json",
+    if (!targetUserId) {
+      console.log('No target userId found for notification (email lookup failed)');
+      return { success: false, reason: 'no_user' };
+    }
+
+    // Create in-app notification
+    await db.collection('users').doc(targetUserId).collection('notifications').add({
+      ...payload,
+      isRead: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    const userDoc = await db.collection('users').doc(targetUserId).get();
+    const userData = userDoc.exists ? userDoc.data() || {} : {};
+    const fcmTokens = userData.fcmTokens || [];
+
+    if (fcmTokens.length === 0) {
+      console.log(`No FCM tokens for user ${targetUserId}`);
+      return { success: true, reason: 'no_tokens' };
+    }
+
+    const message = {
+      notification: { title: payload.title || 'CareLink', body: payload.message || '' },
+      data: payload.data || {},
     };
 
-    const payload = {
-      personalizations: [{ to: [{ email: to }] }],
-      from: { email: "noreply@carelink.app", name: "CareLink" },
-      subject,
-      content: [{ type: "text/html", value: htmlContent }],
-    };
+    const sendPromises = fcmTokens.map((token) =>
+      admin
+        .messaging()
+        .send({ ...message, token })
+        .then((messageId) => {
+          console.log(`Push sent to ${targetUserId} token ${token}: ${messageId}`);
+          return messageId;
+        })
+        .catch((err) => {
+          console.error(`Error sending to token ${token}:`, err.message || err);
+          if (
+            err.code === 'messaging/invalid-registration-token' ||
+            err.code === 'messaging/registration-token-not-registered'
+          ) {
+            return db.collection('users').doc(targetUserId).update({
+              fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
+            });
+          }
+          return null;
+        })
+    );
 
-    const response = await axios.post(url, payload, { headers });
-    console.log(`✅ Email sent to ${to}: ${subject}`);
-    return { success: true, messageId: response.headers["x-message-id"] };
-  } catch (error) {
-    console.error(`❌ Email error to ${to}:`, error.message);
-    return { success: false, error: error.message };
+    await Promise.all(sendPromises);
+    return { success: true };
+  } catch (e) {
+    console.error('Error creating notification/push:', e);
+    return { success: false, error: e.toString() };
   }
 }
+
+// Backwards-compatible callable `sendEmail` endpoint (replaces SendGrid calls)
+// Admin dashboard and other code may call this — we handle it by creating
+// an in-app notification and sending push; emails are not sent.
+exports.sendEmail = onCall(async (request) => {
+  const { to, subject, html } = request.data || {};
+  if (!to || !subject) {
+    throw new HttpsError('invalid-argument', 'Missing to or subject');
+  }
+
+  // Simple strip of HTML tags for notification body
+  const message = (html || '').replace(/<[^>]+>/g, '').trim().substring(0, 500);
+
+  const result = await createNotificationAndPush({
+    email: to,
+    payload: {
+      type: 'system_email_fallback',
+      title: subject,
+      message: message || subject,
+      data: { source: 'sendEmail_callable' },
+    },
+  });
+
+  if (!result.success) {
+    console.log('sendEmail fallback: could not deliver notification for', to, result.reason || result.error);
+  } else {
+    console.log('sendEmail fallback: created in-app notification for', to);
+  }
+
+  return { success: true };
+});
 
 // 🎯 Send payment receipt email when transaction status is marked "completed"
 exports.sendPaymentReceiptEmail = onCall(async (request) => {
@@ -711,8 +781,18 @@ exports.sendPaymentReceiptEmail = onCall(async (request) => {
       <p>Thank you for using CareLink!</p>
     `;
 
-    const result = await sendEmail(clientEmail, "CareLink - Payment Receipt", htmlContent);
-    return { success: result.success };
+    // Create in-app notification + push for payment receipt (email disabled)
+    await createNotificationAndPush({
+      email: clientEmail,
+      payload: {
+        type: 'payment_receipt',
+        title: 'Payment Confirmation',
+        message: `Your payment of KES ${amount} to ${caregiverName || 'your caregiver'} has been processed. Reference: ${reference}`,
+        data: { reference, amount: String(amount), type: 'payment_receipt' },
+      },
+    });
+
+    return { success: true };
   } catch (error) {
     console.error("Error sending receipt email:", error.message);
     throw new HttpsError("internal", "Failed to send receipt email.");
@@ -758,8 +838,18 @@ exports.sendWithdrawalStatusEmail = onCall(async (request) => {
       <p>Best regards,<br>CareLink Team</p>
     `;
 
-    const result = await sendEmail(email, subject, htmlContent);
-    return { success: result.success };
+    // Notify caregiver via in-app notification + push
+    await createNotificationAndPush({
+      userId: caregiverId,
+      payload: {
+        type: 'withdrawal_status',
+        title,
+        message: statusMessage.replace(/<[^>]+>/g, ''),
+        data: { withdrawalId, status, amount: String(amount) },
+      },
+    });
+
+    return { success: true };
   } catch (error) {
     console.error("Error sending withdrawal email:", error.message);
     if (error instanceof HttpsError) throw error;
@@ -791,8 +881,18 @@ exports.sendRefundConfirmationEmail = onCall(async (request) => {
       <p>The refund will be credited back to your original payment method. Thank you for using CareLink.</p>
     `;
 
-    const result = await sendEmail(clientEmail, "CareLink - Refund Processed", htmlContent);
-    return { success: result.success };
+    // Notify client via in-app notification + push about refund
+    await createNotificationAndPush({
+      email: clientEmail,
+      payload: {
+        type: 'refund_processed',
+        title: 'Refund Initiated',
+        message: `Your refund of KES ${amount} has been initiated. Reference: ${reference}`,
+        data: { reference, amount: String(amount), type: 'refund_processed' },
+      },
+    });
+
+    return { success: true };
   } catch (error) {
     console.error("Error sending refund email:", error.message);
     throw new HttpsError("internal", "Failed to send refund email.");
@@ -843,9 +943,19 @@ exports.sendVerificationSubmissionEmail = onCall(async (request) => {
       <p>Best regards,<br><strong>CareLink Verification Team</strong></p>
     `;
 
-    const result = await sendEmail(caregiverEmail, "CareLink - Verification Documents Received", htmlContent);
-    console.log(` Verification submission email sent to ${caregiverEmail}`);
-    return { success: result.success };
+    // Create in-app notification + push for verification submission
+    await createNotificationAndPush({
+      userId: caregiverId,
+      payload: {
+        type: 'verification_submission',
+        title: 'Verification Documents Received',
+        message: 'We have received your verification documents. Our team will review them within 24-48 hours.',
+        data: { type: 'verification_submission' },
+      },
+    });
+
+    console.log(`Notification created for verification submission to ${caregiverId}`);
+    return { success: true };
   } catch (error) {
     console.error("Error sending verification submission email:", error.message);
     throw new HttpsError("internal", "Failed to send verification email.");
@@ -943,9 +1053,21 @@ exports.sendVerificationResultEmail = onCall(async (request) => {
       `;
     }
 
-    const result = await sendEmail(caregiverEmail, subject, htmlContent);
-    console.log(`📧 Verification result email (${approved ? "approved" : "rejected"}) sent to ${caregiverEmail}`);
-    return { success: result.success };
+    // Notify caregiver via in-app notification + push about verification result
+    await createNotificationAndPush({
+      userId: caregiverId,
+      payload: {
+        type: approved ? 'verification_approved' : 'verification_rejected',
+        title: approved ? 'Verification Approved' : 'Verification Status Update',
+        message: approved
+          ? 'Your verification has been approved. You can now bid on jobs.'
+          : `Your verification was not approved. Reason: ${reason || 'Unspecified'}`,
+        data: { approved: String(approved), reason: reason || '' },
+      },
+    });
+
+    console.log(`Notification created for verification result for ${caregiverId}`);
+    return { success: true };
   } catch (error) {
     console.error("Error sending verification result email:", error.message);
     if (error instanceof HttpsError) throw error;
@@ -1686,7 +1808,16 @@ exports.checkExpiringDocuments = onSchedule(
                 </div>
               `;
 
-              await sendEmail(email, subject, htmlContent);
+              // Create in-app notification + push for document expiry reminder
+              await createNotificationAndPush({
+                userId,
+                payload: {
+                  type: 'document_expiry_reminder',
+                  title: 'Document Expiry Reminder',
+                  message: `Your ${doc.documentType.replace('_', ' ')} is expiring in ${daysUntilExpiry} days. Please renew and resubmit.`,
+                  data: { documentType: doc.documentType, daysUntilExpiry: String(daysUntilExpiry) },
+                },
+              });
 
               // Update document to mark reminder as sent
               const updatedDocs = userData.verificationDocuments.map(d =>

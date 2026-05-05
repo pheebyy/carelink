@@ -38,8 +38,9 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
     // Note: This requires Firestore security rules to allow reading users collection
     try {
       _usersStream = FirebaseFirestore.instance
-          .collection('users')
-          .snapshots();
+    .collection('users')
+    .where('role', isEqualTo: 'caregiver')
+    .snapshots();
       debugPrint('Users stream initialized successfully for user: ${currentUser.uid}');
     } catch (e) {
       debugPrint('Error initializing users stream: $e');

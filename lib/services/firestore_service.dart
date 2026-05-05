@@ -341,6 +341,7 @@ class FirestoreService {
           'proposal': proposal,
           'estimatedDuration': estimatedDuration,
           'status': 'pending', // pending, approved, rejected
+          'expiresAt': Timestamp.fromDate(DateTime.now().add(const Duration(days: 7))),
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -612,6 +613,150 @@ class FirestoreService {
           .update({'isRead': true});
     } catch (e) {
       print('🔥 Error marking notification as read: $e');
+    }
+  }
+
+  // ========================= BID EXPIRATION =========================
+  /// Add 7-day expiration to a bid
+  Future<void> addBidExpiration(String jobId, String caregiverId) async {
+    try {
+      final expirationDate = DateTime.now().add(const Duration(days: 7));
+      await _db
+          .collection('jobs')
+          .doc(jobId)
+          .collection('bids')
+          .doc(caregiverId)
+          .update({
+            'expiresAt': Timestamp.fromDate(expirationDate),
+          });
+      print('⏰ Bid expiration set to: $expirationDate');
+    } catch (e) {
+      print('🔥 Error setting bid expiration: $e');
+    }
+  }
+
+  /// Get caregiver's bids filtered by status with expiration handling
+  Stream<QuerySnapshot<Map<String, dynamic>>> getCaregiverBidsWithExpiration(
+    String caregiverId,
+    String status,
+  ) {
+    try {
+      if (caregiverId.isEmpty) {
+        throw Exception("Caregiver ID cannot be empty");
+      }
+
+      print('📊 Fetching caregiver bids with expiration: $status');
+
+      return _db
+          .collectionGroup('bids')
+          .where('caregiverId', isEqualTo: caregiverId)
+          .where('status', isEqualTo: status)
+          .orderBy('status')
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .asyncMap((snapshot) async {
+        // Validate and update expired bids on-the-fly
+        for (var doc in snapshot.docs) {
+          final bidData = doc.data();
+          final expiresAt = bidData['expiresAt'] as Timestamp?;
+
+          if (expiresAt != null && expiresAt.toDate().isBefore(DateTime.now())) {
+            if (bidData['status'] == 'pending') {
+              print('⏰ Auto-expiring bid: ${doc.id}');
+              try {
+                await doc.reference.update({
+                  'status': 'expired',
+                  'updatedAt': FieldValue.serverTimestamp(),
+                });
+              } catch (e) {
+                print('⚠️  Could not auto-expire bid: $e');
+              }
+            }
+          }
+        }
+
+        return snapshot;
+      });
+    } catch (e) {
+      print('🔥 Error getting caregiver bids with expiration: $e');
+      rethrow;
+    }
+  }
+
+  /// Withdraw a pending bid before expiration
+  Future<void> withdrawBid(String jobId, String caregiverId) async {
+    try {
+      if (jobId.isEmpty || caregiverId.isEmpty) {
+        throw Exception("Job ID and Caregiver ID cannot be empty");
+      }
+
+      final jobRef = _db.collection('jobs').doc(jobId);
+      final bidRef = jobRef.collection('bids').doc(caregiverId);
+
+      await _db.runTransaction((txn) async {
+        final bidSnap = await txn.get(bidRef);
+        if (!bidSnap.exists) {
+          throw Exception("Bid not found");
+        }
+
+        final bidData = bidSnap.data() ?? <String, dynamic>{};
+        final bidStatus = (bidData['status'] ?? '').toString().toLowerCase();
+
+        if (bidStatus != 'pending') {
+          throw Exception(
+              "Only pending bids can be withdrawn. Current status: $bidStatus");
+        }
+
+        // Update bid status to withdrawn
+        txn.update(bidRef, {
+          'status': 'withdrawn',
+          'withdrawnAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        print('✅ Bid withdrawn: $caregiverId from job: $jobId');
+      });
+    } catch (e) {
+      print('🔥 Error withdrawing bid: $e');
+      rethrow;
+    }
+  }
+
+  /// Check and mark expired bids (for client-side validation)
+  Future<Map<String, dynamic>> checkAndMarkExpiredBids(
+      String jobId, String caregiverId) async {
+    try {
+      final bidRef = _db.collection('jobs').doc(jobId).collection('bids').doc(caregiverId);
+      final bidDoc = await bidRef.get();
+
+      if (!bidDoc.exists) {
+        return {'exists': false};
+      }
+
+      final bidData = bidDoc.data() ?? <String, dynamic>{};
+      final expiresAt = bidData['expiresAt'] as Timestamp?;
+      final now = DateTime.now();
+
+      final isExpired = expiresAt != null && expiresAt.toDate().isBefore(now);
+
+      // Update if expired
+      if (isExpired && bidData['status'] == 'pending') {
+        await bidRef.update({
+          'status': 'expired',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        print('⏰ Bid marked as expired: $caregiverId');
+      }
+
+      return {
+        'exists': true,
+        'status': isExpired ? 'expired' : bidData['status'],
+        'expiresAt': expiresAt,
+        'isExpired': isExpired,
+      };
+    } catch (e) {
+      print('🔥 Error checking bid expiration: $e');
+      rethrow;
     }
   }
 

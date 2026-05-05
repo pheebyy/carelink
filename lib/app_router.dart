@@ -24,6 +24,7 @@ import 'screens/caregiver_payment_history_screen.dart';
 import 'screens/client_payment_history_screen.dart';
 import 'screens/dispute_and_refund_screen.dart';
 import 'screens/admin_payment_dashboard_screen.dart';
+import 'screens/caregiver_bids_screen.dart';
 import 'Models/Job_model.dart';
 import 'Models/payment_model.dart';
 
@@ -75,6 +76,7 @@ class CarelinkApp extends ConsumerWidget {
         '/client-jobs': (context) => const ClientJobManagementScreen(),
         '/caregiver-analytics': (context) => const CaregiverAnalyticsDashboard(),
         '/caregiver-availability': (context) => const CaregiverAvailabilityScreen(),
+        '/caregiver-bids': (context) => const CaregiverBidsScreen(),
         '/job-search': (context) => const JobSearchFilterScreen(),
         '/caregiver-payment-history': (context) => const CaregiverPaymentHistoryScreen(),
         '/client-payment-history': (context) => const ClientPaymentHistoryScreen(),
