@@ -16,7 +16,7 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('🔥 Error creating user: $e');
+      print('Error creating user: $e');
       rethrow;
     }
   }
@@ -30,7 +30,7 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
-      print('🔥 Error updating user: $e');
+      print('Error updating user: $e');
       rethrow;
     }
   }
@@ -39,7 +39,7 @@ class FirestoreService {
     try {
       return await _db.collection('users').doc(uid).get();
     } catch (e) {
-      print('🔥 Error getting user: $e');
+      print('Error getting user: $e');
       rethrow;
     }
   }
@@ -80,12 +80,12 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Verification documents submitted for caregiver: $caregiverId');
+      print('Verification documents submitted for caregiver: $caregiverId');
 
       // Send verification submission email
       await _sendVerificationSubmissionEmail(caregiverId);
     } catch (e) {
-      print('🔥 Error submitting verification documents: $e');
+      print('Error submitting verification documents: $e');
       rethrow;
     }
   }
@@ -96,7 +96,7 @@ class FirestoreService {
       // Get caregiver info
       final userDoc = await _db.collection('users').doc(caregiverId).get();
       if (!userDoc.exists) {
-        print('⚠️  Caregiver document not found for email');
+        print('Caregiver document not found for email');
         return;
       }
 
@@ -105,7 +105,7 @@ class FirestoreService {
       final caregiverName = userData['name'] as String? ?? userData['displayName'] ?? 'Caregiver';
 
       if (caregiverEmail.isEmpty) {
-        print('⚠️  Caregiver email not found');
+        print('Caregiver email not found');
         return;
       }
 
@@ -118,12 +118,12 @@ class FirestoreService {
       });
 
       if (result.data['success']) {
-        print('✅ Verification submission email sent successfully');
+        print('Verification submission email sent successfully');
       } else {
-        print('⚠️  Email could not be sent (SendGrid may not be configured)');
+        print('Email could not be sent (SendGrid may not be configured)');
       }
     } catch (e) {
-      print('❌ Error sending verification submission email: $e');
+      print('Error sending verification submission email: $e');
       // Don't rethrow - email sending is not critical to the verification flow
     }
   }
@@ -165,7 +165,7 @@ class FirestoreService {
     try {
       return await _db.collection('jobs').doc(jobId).get();
     } catch (e) {
-      print('🔥 Error getting job: $e');
+      print('Error getting job: $e');
       rethrow;
     }
   }
@@ -199,7 +199,7 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
-      print('🔥 Error updating job: $e');
+      print('Error updating job: $e');
       rethrow;
     }
   }
@@ -210,7 +210,7 @@ class FirestoreService {
 
       await _db.collection('jobs').doc(jobId).delete();
     } catch (e) {
-      print('🔥 Error deleting job: $e');
+      print('Error deleting job: $e');
       rethrow;
     }
   }
@@ -274,14 +274,14 @@ class FirestoreService {
       print(' Checking caregiver verification status...');
       final caregiverSnap = await _db.collection('users').doc(caregiverId).get();
       if (!caregiverSnap.exists) {
-        throw Exception("❌ Caregiver not found in users collection");
+        throw Exception("Caregiver not found in users collection");
       }
       
       final caregiverData = caregiverSnap.data() ?? <String, dynamic>{};
       final verificationStatus = caregiverData['verificationStatus'] ?? 'not-started';
       print('   Verification Status: $verificationStatus');
       
-      // ✅ Allow 'approved' OR auto-approve if they have submitted documents
+      // Allow 'approved' OR auto-approve if they have submitted documents
       final hasSubmittedDocuments = (caregiverData['verificationDocuments'] as List?)?.isNotEmpty ?? false;
       final isVerified = verificationStatus == 'approved';
       final hasDocuments = hasSubmittedDocuments || isVerified;
@@ -323,15 +323,15 @@ class FirestoreService {
         print('   Job Status: $jobStatus');
         
         if (jobStatus != 'open') {
-          throw Exception("❌ This job is no longer open for bidding (Status: $jobStatus)");
+          throw Exception("This job is no longer open for bidding (Status: $jobStatus)");
         }
-        print('✅ Job is open for bidding');
+        print('Job is open for bidding');
 
         final existingBidSnap = await txn.get(bidRef);
         if (existingBidSnap.exists) {
-          throw Exception("❌ You have already placed a bid on this job");
+          throw Exception("You have already placed a bid on this job");
         }
-        print('✅ No existing bid found');
+        print('No existing bid found');
 
         print('💾 Writing bid to Firestore...');
         txn.set(bidRef, {
@@ -354,12 +354,12 @@ class FirestoreService {
           'lastBidAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        print('✅ Job metadata updated in transaction');
+        print('Job metadata updated in transaction');
       });
 
-      print('✅ Transaction committed successfully');
+      print('Transaction committed successfully');
       
-      // ✅ CREATE NOTIFICATION: Notify client about new bid (after transaction succeeds)
+      // CREATE NOTIFICATION: Notify client about new bid (after transaction succeeds)
       if (clientId.isNotEmpty) {
         await _createBidNotification(
           jobId: jobId,
@@ -373,8 +373,8 @@ class FirestoreService {
       print('🎉 ===== BID CREATION COMPLETED =====\n');
       return bidRef.id;
     } catch (e) {
-      print('🔥 ERROR creating bid: $e');
-      print('🔥 ===== BID CREATION FAILED =====\n');
+      print('ERROR creating bid: $e');
+      print('===== BID CREATION FAILED =====\n');
       rethrow;
     }
   }
@@ -402,7 +402,7 @@ class FirestoreService {
           .doc(bidId)
           .update(updates);
     } catch (e) {
-      print('🔥 Error updating bid: $e');
+      print('Error updating bid: $e');
       rethrow;
     }
   }
@@ -477,7 +477,7 @@ class FirestoreService {
         });
       });
     } catch (e) {
-      print('🔥 Error approving bid: $e');
+      print('Error approving bid: $e');
       rethrow;
     }
   }
@@ -494,12 +494,12 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('🔥 Error rejecting bid: $e');
+      print('Error rejecting bid: $e');
       rethrow;
     }
   }
 
-  // ✅ CREATE NOTIFICATION FOR CLIENT WHEN BID IS PLACED
+  // CREATE NOTIFICATION FOR CLIENT WHEN BID IS PLACED
   Future<void> _createBidNotification({
     required String jobId,
     required String jobTitle,
@@ -526,9 +526,9 @@ class FirestoreService {
         'createdAt': FieldValue.serverTimestamp(),
       });
       
-      print('✅ Notification created for client');
+      print('Notification created for client');
     } catch (e) {
-      print('⚠️  Warning: Could not create notification: $e');
+      print('Warning: Could not create notification: $e');
       // Don't rethrow - notification failure shouldn't block bid creation
     }
   }
@@ -552,7 +552,7 @@ class FirestoreService {
           .doc(bidId)
           .get();
     } catch (e) {
-      print('🔥 Error getting bid: $e');
+      print('Error getting bid: $e');
       rethrow;
     }
   }
@@ -569,12 +569,12 @@ class FirestoreService {
 
       return bids.docs.isNotEmpty;
     } catch (e) {
-      print('🔥 Error checking bid: $e');
+      print('Error checking bid: $e');
       return false;
     }
   }
 
-  // ✅ GET CLIENT NOTIFICATIONS ABOUT BIDS
+  // GET CLIENT NOTIFICATIONS ABOUT BIDS
   Stream<QuerySnapshot<Map<String, dynamic>>> clientNotificationsStream(
       String clientId) {
     return _db
@@ -585,7 +585,7 @@ class FirestoreService {
         .snapshots();
   }
 
-  // ✅ GET UNREAD NOTIFICATIONS COUNT
+  // GET UNREAD NOTIFICATIONS COUNT
   Future<int> getUnreadNotificationsCount(String clientId) async {
     try {
       final snapshot = await _db
@@ -597,12 +597,12 @@ class FirestoreService {
           .get();
       return snapshot.docs.length;
     } catch (e) {
-      print('🔥 Error getting unread notifications: $e');
+      print('Error getting unread notifications: $e');
       return 0;
     }
   }
 
-  // ✅ MARK NOTIFICATION AS READ
+  // MARK NOTIFICATION AS READ
   Future<void> markNotificationAsRead(String clientId, String notificationId) async {
     try {
       await _db
@@ -612,7 +612,7 @@ class FirestoreService {
           .doc(notificationId)
           .update({'isRead': true});
     } catch (e) {
-      print('🔥 Error marking notification as read: $e');
+      print('Error marking notification as read: $e');
     }
   }
 
@@ -631,7 +631,7 @@ class FirestoreService {
           });
       print('⏰ Bid expiration set to: $expirationDate');
     } catch (e) {
-      print('🔥 Error setting bid expiration: $e');
+      print('Error setting bid expiration: $e');
     }
   }
 
@@ -645,7 +645,7 @@ class FirestoreService {
         throw Exception("Caregiver ID cannot be empty");
       }
 
-      print('📊 Fetching caregiver bids with expiration: $status');
+      print('Fetching caregiver bids with expiration: $status');
 
       return _db
           .collectionGroup('bids')
@@ -669,7 +669,7 @@ class FirestoreService {
                   'updatedAt': FieldValue.serverTimestamp(),
                 });
               } catch (e) {
-                print('⚠️  Could not auto-expire bid: $e');
+                print('Could not auto-expire bid: $e');
               }
             }
           }
@@ -678,7 +678,7 @@ class FirestoreService {
         return snapshot;
       });
     } catch (e) {
-      print('🔥 Error getting caregiver bids with expiration: $e');
+      print('Error getting caregiver bids with expiration: $e');
       rethrow;
     }
   }
@@ -714,10 +714,10 @@ class FirestoreService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        print('✅ Bid withdrawn: $caregiverId from job: $jobId');
+        print('Bid withdrawn: $caregiverId from job: $jobId');
       });
     } catch (e) {
-      print('🔥 Error withdrawing bid: $e');
+      print('Error withdrawing bid: $e');
       rethrow;
     }
   }
@@ -755,7 +755,7 @@ class FirestoreService {
         'isExpired': isExpired,
       };
     } catch (e) {
-      print('🔥 Error checking bid expiration: $e');
+      print('Error checking bid expiration: $e');
       rethrow;
     }
   }
@@ -783,7 +783,7 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('🔥 Error updating application: $e');
+      print('Error updating application: $e');
       rethrow;
     }
   }
@@ -812,7 +812,7 @@ class FirestoreService {
         }
       });
     } catch (e) {
-      print('🔥 Error applying to job: $e');
+      print('Error applying to job: $e');
       rethrow;
     }
   }
@@ -829,7 +829,7 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('🔥 Error hiring caregiver: $e');
+      print('Error hiring caregiver: $e');
       rethrow;
     }
   }
@@ -853,7 +853,7 @@ class FirestoreService {
         'timestamp': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('🔥 Error sending message: $e');
+      print('Error sending message: $e');
       rethrow;
     }
   }
@@ -894,7 +894,7 @@ class FirestoreService {
       });
       return ref.id;
     } catch (e) {
-      print('🔥 Error creating conversation: $e');
+      print('Error creating conversation: $e');
       rethrow;
     }
   }
@@ -912,7 +912,7 @@ class FirestoreService {
     try {
       return await _db.collection('conversations').doc(conversationId).get();
     } catch (e) {
-      print('🔥 Error getting conversation: $e');
+      print('Error getting conversation: $e');
       rethrow;
     }
   }
@@ -954,7 +954,7 @@ class FirestoreService {
         });
       });
     } catch (e) {
-      print('🔥 Error sending conversation message: $e');
+      print('Error sending conversation message: $e');
       rethrow;
     }
   }

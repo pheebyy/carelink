@@ -32,7 +32,7 @@ import {
   Menu as MenuIcon,
   Close as CloseIcon,
 } from '@mui/icons-material';
-import { useTheme, useMediaQuery, IconButton } from '@mui/material';
+// Removed duplicate import of useTheme, useMediaQuery, IconButton
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { auth } from '../lib/firebase';

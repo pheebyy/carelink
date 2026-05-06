@@ -4,18 +4,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
 
-class CarePlanScreen extends StatefulWidget {
-  const CarePlanScreen({super.key});
+// ---------------------------------------------------------------------------
+// ViewModel — keeps all business logic out of the widget tree
+// ---------------------------------------------------------------------------
+class CarePlanViewModel extends ChangeNotifier {
+  CarePlanViewModel({required this.uid, required FirestoreService fs}) : _fs = fs;
 
-  @override
-  State<CarePlanScreen> createState() => _CarePlanScreenState();
-}
+  final String uid;
+  final FirestoreService _fs;
 
-class _CarePlanScreenState extends State<CarePlanScreen> {
-  final _fs = FirestoreService();
-  final _uid = FirebaseAuth.instance.currentUser?.uid;
-
-  static const Set<String> _allowedFrequencies = {
+  static const Set<String> allowedFrequencies = {
     'daily',
     'weekly',
     'weekdays',
@@ -23,7 +21,7 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
     'as needed',
   };
 
-  static const List<MapEntry<String, String>> _frequencyOptions = [
+  static const List<MapEntry<String, String>> frequencyOptions = [
     MapEntry('', 'None'),
     MapEntry('daily', 'Daily'),
     MapEntry('weekly', 'Weekly'),
@@ -32,16 +30,32 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
     MapEntry('as needed', 'As needed'),
   ];
 
-  void _showMessage(String text, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(text),
-        backgroundColor: isError ? Colors.red.shade600 : null,
-      ),
-    );
+  Stream<QuerySnapshot<Map<String, dynamic>>> get carePlansStream =>
+      _fs.carePlansStream(uid);
+
+  String? validateInputs({
+    required String type,
+    required String title,
+    required String description,
+    required String time,
+    required String frequency,
+  }) {
+    if (title.trim().isEmpty) return 'Please enter a title';
+    if (description.trim().length > 280) {
+      return 'Description is too long (max 280 characters)';
+    }
+    if (type == 'medication' && time.trim().isEmpty) {
+      return 'Medication items require a reminder time';
+    }
+    final normalizedFrequency = frequency.trim().toLowerCase();
+    if (normalizedFrequency.isNotEmpty &&
+        !allowedFrequencies.contains(normalizedFrequency)) {
+      return 'Frequency must be: Daily, Weekly, Weekdays, Monthly, or As needed';
+    }
+    return null;
   }
 
-  String _friendlyErrorMessage(
+  String friendlyError(
     Object error, {
     String fallback = 'Something went wrong. Please try again.',
   }) {
@@ -61,58 +75,116 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
           return fallback;
       }
     }
-
     final msg = error.toString().toLowerCase();
     if (msg.contains('permission-denied')) {
       return 'You do not have permission to perform this action.';
     }
-    if (msg.contains('network') || msg.contains('socket') || msg.contains('timeout')) {
+    if (msg.contains('network') ||
+        msg.contains('socket') ||
+        msg.contains('timeout')) {
       return 'No internet connection. Check your network and try again.';
     }
-
     return fallback;
   }
 
-  String? _validateCarePlanInputs({
+  Future<void> createCarePlan({
     required String type,
     required String title,
     required String description,
-    required String time,
-    required String frequency,
-  }) {
-    if (title.trim().isEmpty) {
-      return 'Please enter a title';
-    }
-    if (description.trim().length > 280) {
-      return 'Description is too long (max 280 characters)';
-    }
-    if (type == 'medication' && time.trim().isEmpty) {
-      return 'Medication items require a reminder time';
-    }
-
-    final normalizedFrequency = frequency.trim().toLowerCase();
-    if (normalizedFrequency.isNotEmpty &&
-        !_allowedFrequencies.contains(normalizedFrequency)) {
-      return 'Frequency must be: Daily, Weekly, Weekdays, Monthly, or As needed';
-    }
-
-    return null;
+    String? time,
+    String? frequency,
+  }) async {
+    await _fs.createCarePlan(
+      clientId: uid,
+      type: type,
+      title: title,
+      description: description,
+      time: time,
+      frequency: frequency,
+    );
+    await _syncNotifications();
   }
 
-  Future<void> _pickTime(TextEditingController controller) async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
-    if (picked == null) return;
-    if (!mounted) return;
+  Future<void> updateCarePlan(
+    String planId,
+    Map<String, dynamic> data,
+  ) async {
+    await _fs.updateCarePlan(uid, planId, data);
+    await _syncNotifications();
+  }
 
-    controller.text = picked.format(context);
+  Future<void> deleteCarePlan(String planId) async {
+    await _fs.deleteCarePlan(uid, planId);
+    await _syncNotifications();
+  }
+
+  Future<void> toggleCompletion(String planId, bool value) async {
+    await _fs.toggleCarePlanCompletion(uid, planId, value);
+    await _syncNotifications();
+  }
+
+  Future<void> _syncNotifications() async {
+    try {
+      await NotificationService.instance.syncMedicationRemindersForUser(uid);
+    } catch (e) {
+      // Notification sync is best-effort; log but don't surface to user.
+      debugPrint('[CarePlanViewModel] Notification sync failed: $e');
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Screen
+// ---------------------------------------------------------------------------
+class CarePlanScreen extends StatefulWidget {
+  const CarePlanScreen({super.key});
+
+  @override
+  State<CarePlanScreen> createState() => _CarePlanScreenState();
+}
+
+class _CarePlanScreenState extends State<CarePlanScreen> {
+  late final CarePlanViewModel _vm;
+  bool _authReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Resolve UID at init time via a stream so auth-state changes are caught.
+    FirebaseAuth.instance.authStateChanges().first.then((user) {
+      if (!mounted) return;
+      if (user != null) {
+        setState(() {
+          _vm = CarePlanViewModel(uid: user.uid, fs: FirestoreService());
+          _authReady = true;
+        });
+      } else {
+        setState(() => _authReady = true); // authReady but no user
+      }
+    });
+  }
+
+  void _showMessage(String text, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor: isError ? Colors.red.shade600 : null,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_uid == null) {
+    if (!_authReady) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // ignore: use_late_for_private_fields_and_variables
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Care Plan'),
@@ -130,13 +202,13 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () => _showAddCarePlanDialog(),
             tooltip: 'Add Care Plan Item',
+            onPressed: () => _showCarePlanDialog(),
           ),
         ],
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _fs.carePlansStream(_uid),
+        stream: _vm.carePlansStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -149,21 +221,25 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.error_outline, color: Colors.red.shade400, size: 42),
+                    Icon(Icons.error_outline,
+                        color: Colors.red.shade400, size: 42),
                     const SizedBox(height: 12),
                     Text(
-                      _friendlyErrorMessage(
+                      _vm.friendlyError(
                         snapshot.error ?? Exception('Unknown error'),
-                        fallback: 'Unable to load your care plan right now. Please try again.',
+                        fallback:
+                            'Unable to load your care plan right now. Please try again.',
                       ),
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                      style: TextStyle(
+                          color: Colors.grey.shade700, fontSize: 14),
                     ),
                     const SizedBox(height: 12),
+                    // The stream auto-recovers; this button is just reassuring UX.
                     TextButton.icon(
                       onPressed: () => setState(() {}),
                       icon: const Icon(Icons.refresh),
-                      label: const Text('Try again'),
+                      label: const Text('Dismiss'),
                     ),
                   ],
                 ),
@@ -178,15 +254,17 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.favorite_border, size: 80, color: Colors.grey.shade400),
+                  Icon(Icons.favorite_border,
+                      size: 80, color: Colors.grey.shade400),
                   const SizedBox(height: 16),
                   Text(
                     'No care plans yet',
-                    style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+                    style: TextStyle(
+                        fontSize: 18, color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 8),
                   TextButton.icon(
-                    onPressed: () => _showAddCarePlanDialog(),
+                    onPressed: () => _showCarePlanDialog(),
                     icon: const Icon(Icons.add),
                     label: const Text('Add Care Plan'),
                   ),
@@ -200,10 +278,20 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
             itemCount: carePlans.length,
             itemBuilder: (context, index) {
               final doc = carePlans[index];
-              final plan = doc.data();
-              final planId = doc.id;
-
-              return _buildCarePlanCard(planId, plan);
+              return _CarePlanCard(
+                planId: doc.id,
+                plan: doc.data(),
+                vm: _vm,
+                onEdit: () => _showCarePlanDialog(
+                  planId: doc.id,
+                  existing: doc.data(),
+                ),
+                onDeleteConfirm: () => _confirmDelete(
+                  doc.id,
+                  doc.data()['title'] ?? 'Untitled',
+                ),
+                onError: (msg) => _showMessage(msg, isError: true),
+              );
             },
           );
         },
@@ -211,81 +299,116 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
     );
   }
 
-  Widget _buildCarePlanCard(String planId, Map<String, dynamic> plan) {
+  // ---------------------------------------------------------------------------
+  // Unified add/edit dialog — extracted into its own StatefulWidget so that
+  // TextEditingControllers are properly disposed when the dialog closes.
+  // ---------------------------------------------------------------------------
+  void _showCarePlanDialog({
+    String? planId,
+    Map<String, dynamic>? existing,
+  }) {
+    showDialog(
+      context: context,
+      builder: (_) => _CarePlanDialog(
+        planId: planId,
+        existing: existing,
+        vm: _vm,
+        onSuccess: (msg) => _showMessage(msg),
+        onError: (msg) => _showMessage(msg, isError: true),
+      ),
+    );
+  }
+
+  void _confirmDelete(String planId, String title) {
+    showDialog(
+      context: context,
+      builder: (_) => _DeleteDialog(
+        planId: planId,
+        title: title,
+        vm: _vm,
+        onSuccess: () => _showMessage('Care plan deleted'),
+        onError: (msg) => _showMessage(msg, isError: true),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Care plan card — extracted to keep _CarePlanScreenState lean
+// ---------------------------------------------------------------------------
+class _CarePlanCard extends StatelessWidget {
+  const _CarePlanCard({
+    required this.planId,
+    required this.plan,
+    required this.vm,
+    required this.onEdit,
+    required this.onDeleteConfirm,
+    required this.onError,
+  });
+
+  final String planId;
+  final Map<String, dynamic> plan;
+  final CarePlanViewModel vm;
+  final VoidCallback onEdit;
+  final VoidCallback onDeleteConfirm;
+  final void Function(String) onError;
+
+  static const _typeConfig = <String, (IconData, Color)>{
+    'medication': (Icons.medication, Colors.blue),
+    'goal': (Icons.trending_up, Colors.green),
+    'appointment': (Icons.calendar_today, Colors.orange),
+    'exercise': (Icons.fitness_center, Colors.purple),
+  };
+
+  @override
+  Widget build(BuildContext context) {
     final type = plan['type'] ?? 'general';
     final title = plan['title'] ?? 'Untitled';
     final description = plan['description'] ?? '';
-    final time = plan['time'];
-    final frequency = plan['frequency'];
+    final time = plan['time'] as String?;
+    final frequency = plan['frequency'] as String?;
     final isCompleted = plan['isCompleted'] ?? false;
 
-    IconData icon;
-    Color color;
-
-    switch (type) {
-      case 'medication':
-        icon = Icons.medication;
-        color = Colors.blue;
-        break;
-      case 'goal':
-        icon = Icons.trending_up;
-        color = Colors.green;
-        break;
-      case 'appointment':
-        icon = Icons.calendar_today;
-        color = Colors.orange;
-        break;
-      case 'exercise':
-        icon = Icons.fitness_center;
-        color = Colors.purple;
-        break;
-      default:
-        icon = Icons.favorite;
-        color = Colors.pink;
-    }
+    final (icon, color) =
+        _typeConfig[type] ?? (Icons.favorite, Colors.pink);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () => _showEditCarePlanDialog(planId, plan),
+        onTap: onEdit,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Checkbox
+              // Completion checkbox
               Checkbox(
                 value: isCompleted,
+                activeColor: Colors.green,
                 onChanged: (value) async {
                   try {
-                    await _fs.toggleCarePlanCompletion(_uid!, planId, value ?? false);
-                    await NotificationService.instance.syncMedicationRemindersForUser(_uid);
+                    await vm.toggleCompletion(planId, value ?? false);
                   } catch (e) {
-                    if (mounted) {
-                      _showMessage(
-                        _friendlyErrorMessage(
-                          e,
-                          fallback: 'Unable to update this care plan item right now. Please try again.',
-                        ),
-                        isError: true,
-                      );
-                    }
+                    onError(vm.friendlyError(e,
+                        fallback:
+                            'Unable to update this item. Please try again.'));
                   }
                 },
-                activeColor: Colors.green,
               ),
               const SizedBox(width: 12),
-              // Icon
+              // Type icon
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: color, size: 24),
+                child: Icon(icon, color: color, size: 24,
+                    semanticLabel: type),
               ),
               const SizedBox(width: 16),
               // Content
@@ -293,45 +416,71 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        decoration: isCompleted ? TextDecoration.lineThrough : null,
-                        color: isCompleted ? Colors.grey : Colors.black87,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              decoration: isCompleted
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                              color: isCompleted
+                                  ? Colors.grey
+                                  : Colors.black87,
+                            ),
+                          ),
+                        ),
+                        // Edit affordance so tappability is obvious
+                        Icon(Icons.edit_outlined,
+                            size: 16, color: Colors.grey.shade400),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                        decoration: isCompleted ? TextDecoration.lineThrough : null,
+                    if (description.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                          decoration: isCompleted
+                              ? TextDecoration.lineThrough
+                              : null,
+                        ),
                       ),
-                    ),
+                    ],
                     if (time != null || frequency != null) ...[
                       const SizedBox(height: 8),
                       Row(
                         children: [
                           if (time != null) ...[
-                            Icon(Icons.schedule, size: 14, color: Colors.grey.shade500),
+                            Icon(Icons.schedule,
+                                size: 14,
+                                color: Colors.grey.shade500),
                             const SizedBox(width: 4),
                             Text(
                               time,
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600),
                             ),
                           ],
                           if (time != null && frequency != null)
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                              child: Text('•', style: TextStyle(color: Colors.grey.shade400)),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8),
+                              child: Text('•',
+                                  style: TextStyle(
+                                      color: Colors.grey.shade400)),
                             ),
                           if (frequency != null)
                             Text(
                               frequency,
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600),
                             ),
                         ],
                       ),
@@ -340,9 +489,13 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
                 ),
               ),
               // Delete button
-              IconButton(
-                icon: Icon(Icons.delete_outline, color: Colors.red.shade400),
-                onPressed: () => _confirmDelete(planId, title),
+              Semantics(
+                label: 'Delete $title',
+                child: IconButton(
+                  icon: Icon(Icons.delete_outline,
+                      color: Colors.red.shade400),
+                  onPressed: onDeleteConfirm,
+                ),
               ),
             ],
           ),
@@ -350,387 +503,322 @@ class _CarePlanScreenState extends State<CarePlanScreen> {
       ),
     );
   }
+}
 
-  void _showAddCarePlanDialog() {
-    final titleController = TextEditingController();
-    final descriptionController = TextEditingController();
-    final timeController = TextEditingController();
-    String selectedType = 'medication';
-    String selectedFrequency = '';
-    bool isSaving = false;
+// ---------------------------------------------------------------------------
+// Unified add / edit dialog — StatefulWidget so controllers are disposed
+// ---------------------------------------------------------------------------
+class _CarePlanDialog extends StatefulWidget {
+  const _CarePlanDialog({
+    this.planId,
+    this.existing,
+    required this.vm,
+    required this.onSuccess,
+    required this.onError,
+  });
 
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add Care Plan Item'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Type dropdown
-                DropdownButtonFormField<String>(
-                  value: selectedType,
-                  decoration: const InputDecoration(
-                    labelText: 'Type',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'medication', child: Text('Medication')),
-                    DropdownMenuItem(value: 'goal', child: Text('Goal')),
-                    DropdownMenuItem(value: 'appointment', child: Text('Appointment')),
-                    DropdownMenuItem(value: 'exercise', child: Text('Exercise')),
-                    DropdownMenuItem(value: 'general', child: Text('General')),
-                  ],
-                  onChanged: (value) {
-                    setDialogState(() => selectedType = value!);
-                  },
-                ),
-                const SizedBox(height: 16),
-                // Title
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Title',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Description
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                // Time
-                TextField(
-                  controller: timeController,
-                  readOnly: true,
-                  onTap: () => _pickTime(timeController),
-                  decoration: const InputDecoration(
-                    labelText: 'Time (optional)',
-                    hintText: 'Tap to choose time',
-                    suffixIcon: Icon(Icons.access_time),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Frequency
-                DropdownButtonFormField<String>(
-                  value: selectedFrequency,
-                  decoration: const InputDecoration(
-                    labelText: 'Frequency (optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: _frequencyOptions
-                      .map(
-                        (option) => DropdownMenuItem<String>(
-                          value: option.key,
-                          child: Text(option.value),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    setDialogState(() => selectedFrequency = value ?? '');
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isSaving ? null : () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: isSaving
-                  ? null
-                  : () async {
-                final validationError = _validateCarePlanInputs(
-                  type: selectedType,
-                  title: titleController.text,
-                  description: descriptionController.text,
-                  time: timeController.text,
-                  frequency: selectedFrequency,
-                );
+  final String? planId;
+  final Map<String, dynamic>? existing;
+  final CarePlanViewModel vm;
+  final void Function(String) onSuccess;
+  final void Function(String) onError;
 
-                if (validationError != null) {
-                  _showMessage(validationError, isError: true);
-                  return;
-                }
+  bool get isEditing => planId != null;
 
-                setDialogState(() => isSaving = true);
-                try {
-                  await _fs.createCarePlan(
-                    clientId: _uid!,
-                    type: selectedType,
-                    title: titleController.text.trim(),
-                    description: descriptionController.text.trim(),
-                    time: timeController.text.trim().isEmpty ? null : timeController.text.trim(),
-                    frequency: selectedFrequency.trim().isEmpty
-                        ? null
-                      : selectedFrequency,
-                  );
+  @override
+  State<_CarePlanDialog> createState() => _CarePlanDialogState();
+}
 
-                  await NotificationService.instance.syncMedicationRemindersForUser(_uid);
+class _CarePlanDialogState extends State<_CarePlanDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _descriptionController;
+  late final TextEditingController _timeController;
 
-                  if (mounted) {
-                    Navigator.pop(context);
-                    _showMessage('Care plan added successfully');
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    _showMessage(
-                      _friendlyErrorMessage(
-                        e,
-                        fallback: 'Unable to add care plan item. Please try again.',
-                      ),
-                      isError: true,
-                    );
-                  }
-                } finally {
-                  if (mounted) {
-                    setDialogState(() => isSaving = false);
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              child: isSaving
-                  ? const SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Add'),
-            ),
-          ],
-        ),
-      ),
-    );
+  late String _selectedType;
+  late String _selectedFrequency;
+  bool _isSaving = false;
+
+  // Character counter state
+  int _descLength = 0;
+  static const int _maxDescLength = 280;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _titleController = TextEditingController(text: e?['title'] ?? '');
+    _descriptionController =
+        TextEditingController(text: e?['description'] ?? '');
+    _timeController =
+        TextEditingController(text: e?['time'] ?? '');
+    _selectedType = e?['type'] ?? 'medication';
+    final rawFreq =
+        (e?['frequency'] ?? '').toString().toLowerCase().trim();
+    _selectedFrequency =
+        CarePlanViewModel.allowedFrequencies.contains(rawFreq)
+            ? rawFreq
+            : '';
+    _descLength = _descriptionController.text.length;
+    _descriptionController.addListener(() {
+      if (mounted) setState(() => _descLength = _descriptionController.text.length);
+    });
   }
 
-  void _showEditCarePlanDialog(String planId, Map<String, dynamic> plan) {
-    final titleController = TextEditingController(text: plan['title']);
-    final descriptionController = TextEditingController(text: plan['description']);
-    final timeController = TextEditingController(text: plan['time'] ?? '');
-    String selectedType = plan['type'] ?? 'medication';
-    final rawFrequency = (plan['frequency'] ?? '').toString().toLowerCase().trim();
-    String selectedFrequency = _allowedFrequencies.contains(rawFrequency) ? rawFrequency : '';
-    bool isSaving = false;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Edit Care Plan Item'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Type dropdown
-                DropdownButtonFormField<String>(
-                  value: selectedType,
-                  decoration: const InputDecoration(
-                    labelText: 'Type',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'medication', child: Text('Medication')),
-                    DropdownMenuItem(value: 'goal', child: Text('Goal')),
-                    DropdownMenuItem(value: 'appointment', child: Text('Appointment')),
-                    DropdownMenuItem(value: 'exercise', child: Text('Exercise')),
-                    DropdownMenuItem(value: 'general', child: Text('General')),
-                  ],
-                  onChanged: (value) {
-                    setDialogState(() => selectedType = value!);
-                  },
-                ),
-                const SizedBox(height: 16),
-                // Title
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Title',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Description
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                // Time
-                TextField(
-                  controller: timeController,
-                  readOnly: true,
-                  onTap: () => _pickTime(timeController),
-                  decoration: const InputDecoration(
-                    labelText: 'Time (optional)',
-                    hintText: 'Tap to choose time',
-                    suffixIcon: Icon(Icons.access_time),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Frequency
-                DropdownButtonFormField<String>(
-                  value: selectedFrequency,
-                  decoration: const InputDecoration(
-                    labelText: 'Frequency (optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: _frequencyOptions
-                      .map(
-                        (option) => DropdownMenuItem<String>(
-                          value: option.key,
-                          child: Text(option.value),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    setDialogState(() => selectedFrequency = value ?? '');
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isSaving ? null : () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: isSaving
-                  ? null
-                  : () async {
-                final validationError = _validateCarePlanInputs(
-                  type: selectedType,
-                  title: titleController.text,
-                  description: descriptionController.text,
-                  time: timeController.text,
-                  frequency: selectedFrequency,
-                );
-
-                if (validationError != null) {
-                  _showMessage(validationError, isError: true);
-                  return;
-                }
-
-                setDialogState(() => isSaving = true);
-                try {
-                  await _fs.updateCarePlan(_uid!, planId, {
-                    'type': selectedType,
-                    'title': titleController.text.trim(),
-                    'description': descriptionController.text.trim(),
-                    'time': timeController.text.trim().isEmpty ? null : timeController.text.trim(),
-                    'frequency': selectedFrequency.trim().isEmpty
-                        ? null
-                      : selectedFrequency,
-                  });
-
-                  await NotificationService.instance.syncMedicationRemindersForUser(_uid);
-
-                  if (mounted) {
-                    Navigator.pop(context);
-                    _showMessage('Care plan updated successfully');
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    _showMessage(
-                      _friendlyErrorMessage(
-                        e,
-                        fallback: 'Unable to update care plan item. Please try again.',
-                      ),
-                      isError: true,
-                    );
-                  }
-                } finally {
-                  if (mounted) {
-                    setDialogState(() => isSaving = false);
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              child: isSaving
-                  ? const SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Update'),
-            ),
-          ],
-        ),
-      ),
-    );
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _timeController.dispose();
+    super.dispose();
   }
 
-  void _confirmDelete(String planId, String title) {
-    bool isDeleting = false;
-    showDialog(
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Delete Care Plan'),
-          content: Text('Are you sure you want to delete "$title"?'),
-          actions: [
-            TextButton(
-              onPressed: isDeleting ? null : () => Navigator.pop(context),
-              child: const Text('Cancel'),
+      initialTime: TimeOfDay.now(),
+    );
+    if (picked == null || !mounted) return;
+    _timeController.text = picked.format(context);
+  }
+
+  Future<void> _submit() async {
+    final validationError = widget.vm.validateInputs(
+      type: _selectedType,
+      title: _titleController.text,
+      description: _descriptionController.text,
+      time: _timeController.text,
+      frequency: _selectedFrequency,
+    );
+    if (validationError != null) {
+      widget.onError(validationError);
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      final title = _titleController.text.trim();
+      final description = _descriptionController.text.trim();
+      final time = _timeController.text.trim().isEmpty
+          ? null
+          : _timeController.text.trim();
+      final frequency = _selectedFrequency.trim().isEmpty
+          ? null
+          : _selectedFrequency;
+
+      if (widget.isEditing) {
+        await widget.vm.updateCarePlan(widget.planId!, {
+          'type': _selectedType,
+          'title': title,
+          'description': description,
+          'time': time,
+          'frequency': frequency,
+        });
+      } else {
+        await widget.vm.createCarePlan(
+          type: _selectedType,
+          title: title,
+          description: description,
+          time: time,
+          frequency: frequency,
+        );
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onSuccess(
+          widget.isEditing
+              ? 'Care plan updated successfully'
+              : 'Care plan added successfully',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        widget.onError(widget.vm.friendlyError(
+          e,
+          fallback: widget.isEditing
+              ? 'Unable to update care plan item. Please try again.'
+              : 'Unable to add care plan item. Please try again.',
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isOverLimit = _descLength > _maxDescLength;
+    return AlertDialog(
+      title: Text(widget.isEditing ? 'Edit Care Plan Item' : 'Add Care Plan Item'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Type
+            DropdownButtonFormField<String>(
+              value: _selectedType,
+              decoration: const InputDecoration(
+                labelText: 'Type',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'medication', child: Text('Medication')),
+                DropdownMenuItem(value: 'goal', child: Text('Goal')),
+                DropdownMenuItem(value: 'appointment', child: Text('Appointment')),
+                DropdownMenuItem(value: 'exercise', child: Text('Exercise')),
+                DropdownMenuItem(value: 'general', child: Text('General')),
+              ],
+              onChanged: (v) => setState(() => _selectedType = v!),
             ),
-            ElevatedButton(
-              onPressed: isDeleting
-                  ? null
-                  : () async {
-                      setDialogState(() => isDeleting = true);
-                      try {
-                        await _fs.deleteCarePlan(_uid!, planId);
-                        await NotificationService.instance.syncMedicationRemindersForUser(_uid);
-                        if (mounted) {
-                          Navigator.pop(context);
-                          _showMessage('Care plan deleted');
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          Navigator.pop(context);
-                          _showMessage(
-                            _friendlyErrorMessage(
-                              e,
-                              fallback: 'Unable to delete care plan item. Please try again.',
-                            ),
-                            isError: true,
-                          );
-                        }
-                      } finally {
-                        if (mounted) {
-                          setDialogState(() => isDeleting = false);
-                        }
-                      }
-                    },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: isDeleting
-                  ? const SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Delete'),
+            const SizedBox(height: 16),
+            // Title
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Description with live counter
+            TextField(
+              controller: _descriptionController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: 'Description',
+                border: const OutlineInputBorder(),
+                counterText: '$_descLength / $_maxDescLength',
+                counterStyle: TextStyle(
+                  color: isOverLimit ? Colors.red : Colors.grey,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Time
+            TextField(
+              controller: _timeController,
+              readOnly: true,
+              onTap: _pickTime,
+              decoration: const InputDecoration(
+                labelText: 'Time (optional)',
+                hintText: 'Tap to choose time',
+                suffixIcon: Icon(Icons.access_time),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Frequency
+            DropdownButtonFormField<String>(
+              value: _selectedFrequency,
+              decoration: const InputDecoration(
+                labelText: 'Frequency (optional)',
+                border: OutlineInputBorder(),
+              ),
+              items: CarePlanViewModel.frequencyOptions
+                  .map((o) => DropdownMenuItem<String>(
+                        value: o.key,
+                        child: Text(o.value),
+                      ))
+                  .toList(),
+              onChanged: (v) =>
+                  setState(() => _selectedFrequency = v ?? ''),
             ),
           ],
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _submit,
+          style:
+              ElevatedButton.styleFrom(backgroundColor: Colors.green),
+          child: _isSaving
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child:
+                      CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(widget.isEditing ? 'Update' : 'Add'),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Delete confirmation dialog — also a StatefulWidget for loading state
+// ---------------------------------------------------------------------------
+class _DeleteDialog extends StatefulWidget {
+  const _DeleteDialog({
+    required this.planId,
+    required this.title,
+    required this.vm,
+    required this.onSuccess,
+    required this.onError,
+  });
+
+  final String planId;
+  final String title;
+  final CarePlanViewModel vm;
+  final VoidCallback onSuccess;
+  final void Function(String) onError;
+
+  @override
+  State<_DeleteDialog> createState() => _DeleteDialogState();
+}
+
+class _DeleteDialogState extends State<_DeleteDialog> {
+  bool _isDeleting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Delete Care Plan'),
+      content: Text('Are you sure you want to delete "${widget.title}"?'),
+      actions: [
+        TextButton(
+          onPressed: _isDeleting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isDeleting
+              ? null
+              : () async {
+                  setState(() => _isDeleting = true);
+                  try {
+                    await widget.vm.deleteCarePlan(widget.planId);
+                    if (mounted) {
+                      Navigator.pop(context);
+                      widget.onSuccess();
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      Navigator.pop(context);
+                      widget.onError(widget.vm.friendlyError(
+                        e,
+                        fallback:
+                            'Unable to delete care plan item. Please try again.',
+                      ));
+                    }
+                  } finally {
+                    if (mounted) setState(() => _isDeleting = false);
+                  }
+                },
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          child: _isDeleting
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Delete'),
+        ),
+      ],
     );
   }
 }

@@ -65,5 +65,8 @@ node_modules/
 # dotenv environment variables file
 .env
 
+# Firebase Admin SDK key (sensitive)
+firebase-admin-key.json
+
 # dataconnect generated files
 .dataconnect

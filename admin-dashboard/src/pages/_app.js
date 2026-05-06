@@ -326,14 +326,14 @@ function AppContent({ Component, pageProps }) {
 
 export default function App({ Component, pageProps }) {
   return (
-    <ErrorBoundary>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Toaster position="top-right" />
-        <AdminProvider>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Toaster position="top-right" />
+      <AdminProvider>
+        <ErrorBoundary>
           <AppContent Component={Component} pageProps={pageProps} />
-        </AdminProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
+        </ErrorBoundary>
+      </AdminProvider>
+    </ThemeProvider>
   );
 }

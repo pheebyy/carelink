@@ -1,7 +1,6 @@
 import 'package:carelink/screens/ClientProfileEditScreen.dart';
 import 'package:carelink/screens/ai_assistant_screen.dart';
 import 'package:carelink/screens/conversations_chat_screen.dart';
-import 'package:carelink/screens/vitals_ble_screen.dart';
 import 'package:carelink/screens/conversations_inbox_screen.dart';
 import 'package:carelink/screens/visits_screen.dart';
 import 'package:carelink/screens/search_caregivers_screen.dart';
@@ -43,9 +42,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildWelcomeHeroCard(),
-                      const SizedBox(height: 14),
-                      _buildVitalsMonitorButton(),
+                      
                       const SizedBox(height: 18),
                       _buildStatsSection(),
                       const SizedBox(height: 24),
@@ -179,31 +176,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
-  Widget _buildVitalsMonitorButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        icon: const Icon(Icons.favorite, color: Colors.red),
-        label: const Text('Monitor Vitals'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.red,
-          side: const BorderSide(color: Color(0xFFF3B2B2)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          elevation: 1,
-          shadowColor: Colors.red.shade100,
-          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-        ),
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const VitalsBleScreen()),
-          );
-        },
-      ),
-    );
-  }
 
   Widget _buildStatsSection() {
     return Column(

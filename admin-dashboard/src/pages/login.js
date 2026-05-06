@@ -37,8 +37,10 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const idTokenResult = await userCredential.user.getIdTokenResult(true);
 
-      // Check if user has admin role
-      if (!idTokenResult.claims.admin_role) {
+      // Check if user has admin role or admin claim (backwards compatibility)
+      const claims = idTokenResult.claims || {};
+      const isAdmin = !!(claims.admin_role || claims.admin);
+      if (!isAdmin) {
         setError('You do not have admin access');
         await auth.signOut();
         setLoading(false);

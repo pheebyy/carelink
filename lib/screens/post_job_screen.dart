@@ -35,7 +35,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
     'Mobility Assistance',
     'Medication Management',
     'Wound Care',
-    'Dementia Care',
+    'Postpartum  Care',
     'Physical Therapy',
     'Mental Health Support',
     'Cooking & Nutrition',
@@ -140,7 +140,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Job posted successfully!'),
+            content: Text('Job posted successfully!'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 2),
           ),

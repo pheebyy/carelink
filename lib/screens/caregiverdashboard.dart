@@ -3,7 +3,6 @@ import 'package:carelink/screens/profile_edit_screen.dart';
 import 'package:carelink/screens/all_jobs_screen.dart';
 import 'package:carelink/screens/conversations_inbox_screen.dart';
 import 'package:carelink/screens/caregiver_wallet_screen.dart';
-import 'package:carelink/screens/vitals_ble_screen.dart';
 import 'package:carelink/widgets/ai_assistant_widget.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -202,9 +201,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
                   child: Column(
                     children: [
-                      _buildWelcomeHeroCard(),
-                      const SizedBox(height: 12),
-                      _buildVitalsMonitorButton(),
+                      
                     ],
                   ),
                 ),
@@ -503,89 +500,9 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   }
 
   Widget _buildWelcomeHeroCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.green.shade600, Colors.teal.shade500],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.teal.shade100,
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.shield_outlined, color: Colors.white, size: 22),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Caregiver command center',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Review jobs faster, track updates, and stay ready for your next visit.',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
-  Widget _buildVitalsMonitorButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        icon: const Icon(Icons.favorite, color: Colors.red),
-        label: const Text('Monitor Vitals'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.red,
-          side: const BorderSide(color: Color(0xFFF3B2B2)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          elevation: 1,
-          shadowColor: Colors.red.shade100,
-          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-        ),
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const VitalsBleScreen()),
-          );
-        },
-      ),
-    );
-  }
 
   Widget _buildAiAssistantFab() {
     return FloatingActionButton.extended(

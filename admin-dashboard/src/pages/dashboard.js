@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Box,
   Grid,
@@ -8,6 +8,8 @@ import {
   Button,
   LinearProgress,
   Alert,
+  Skeleton,
+  Chip,
 } from '@mui/material';
 import { db } from '../lib/firebase';
 import {
@@ -16,6 +18,8 @@ import {
   onSnapshot,
   orderBy,
   limit,
+  where,
+  Timestamp,
 } from 'firebase/firestore';
 import { StatCard } from '../components/StatCard';
 import { DataTable } from '../components/DataTable';
@@ -30,8 +34,6 @@ import { COLORS, SHADOWS, TRANSITIONS } from '../lib/themeConstants';
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
   PieChart,
   Pie,
   Cell,
@@ -43,20 +45,94 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
+// ---------------------------------------------------------------------------
+// Status helpers
+// ---------------------------------------------------------------------------
 const isPendingVerification = (status) =>
   !status || status === 'pending' || status === 'pending_verification';
 
 const isOpenDispute = (status) =>
-  !status || ['pending', 'open', 'submitted', 'investigating', 'awaiting_user'].includes(status);
+  !status ||
+  ['pending', 'open', 'submitted', 'investigating', 'awaiting_user'].includes(status);
 
-const isActiveRefund = (status) =>
-  ['pending', 'processing'].includes(status);
+const isActiveRefund = (status) => ['pending', 'processing'].includes(status);
 
 const safePercent = (value, total) => {
   if (!total) return 0;
   return Math.min(100, Math.max(0, (value / total) * 100));
 };
 
+// ---------------------------------------------------------------------------
+// Build a 7-day timeline skeleton so the chart always has an x-axis to show.
+// Actual values are filled in once transaction data arrives.
+// ---------------------------------------------------------------------------
+const buildTimelineSkeleton = () => {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push({
+      day: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+      date: d.toDateString(),
+      revenue: 0,
+      jobs: 0,
+    });
+  }
+  return days;
+};
+
+// ---------------------------------------------------------------------------
+// Custom tooltip for the LineChart
+// ---------------------------------------------------------------------------
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <Box
+      sx={{
+        background: COLORS.surface,
+        border: `1px solid ${COLORS.divider}`,
+        borderRadius: '8px',
+        p: 1.5,
+        boxShadow: SHADOWS.sm,
+      }}
+    >
+      <Typography variant="caption" sx={{ color: COLORS.gray600, display: 'block', mb: 0.5 }}>
+        {label}
+      </Typography>
+      {payload.map((entry) => (
+        <Typography
+          key={entry.name}
+          variant="body2"
+          sx={{ color: entry.stroke, fontWeight: 600 }}
+        >
+          {entry.name}:{' '}
+          {entry.name.toLowerCase().includes('revenue')
+            ? formatCurrency(entry.value)
+            : entry.value}
+        </Typography>
+      ))}
+    </Box>
+  );
+};
+
+
+const ChartSkeleton = ({ height = 300 }) => (
+  <Box sx={{ height, display: 'flex', alignItems: 'flex-end', gap: 1, px: 1 }}>
+    {[60, 80, 45, 90, 70, 85, 55].map((h, i) => (
+      <Skeleton
+        key={i}
+        variant="rectangular"
+        width="100%"
+        height={`${h}%`}
+        sx={{ borderRadius: 1 }}
+      />
+    ))}
+  </Box>
+);
+
+// ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
 export default function Dashboard() {
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -68,201 +144,318 @@ export default function Dashboard() {
     completedJobs: 0,
     activeJobs: 0,
   });
+
+  // Track which collections have finished their first snapshot
+  const [loaded, setLoaded] = useState({
+    users: false,
+    jobs: false,
+    transactions: false,
+    disputes: false,
+    refunds: false,
+    auditLogs: false,
+  });
+
   const [recentActivity, setRecentActivity] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState({
-    timeline: [],
+    timeline: buildTimelineSkeleton(),
     distribution: [],
     paymentStatus: [],
   });
-  const [dashboardError, setDashboardError] = useState('');
+  const [errors, setErrors] = useState([]);
 
+  // Prevent state updates after unmount
+  const isMounted = useRef(true);
   useEffect(() => {
-    // Set up real-time listeners for dashboard data
-    const unsubscribers = [];
-    const handleSnapshotError = (label) => (error) => {
-      console.error(`Dashboard ${label} listener error:`, error);
-      setDashboardError(
-        `Some dashboard data could not be loaded (${label}). Check permissions.`
-      );
-      setLoading(false);
-    };
-
-    // Subscribe to users collection - limit to reduce load
-    const usersUnsub = onSnapshot(
-      query(collection(db, 'users'), limit(500)),
-      (snapshot) => {
-        const totalUsers = snapshot.size;
-        const pendingApprovalsCount = snapshot.docs.filter(
-          (doc) => isPendingVerification(doc.data().verificationStatus)
-        ).length;
-
-        setStats((prevStats) => ({
-          ...prevStats,
-          totalUsers,
-          pendingApprovals: pendingApprovalsCount,
-        }));
-      },
-      handleSnapshotError('users')
-    );
-    unsubscribers.push(usersUnsub);
-
-    // Subscribe to jobs collection - limit to reduce load
-    const jobsUnsub = onSnapshot(
-      query(collection(db, 'jobs'), limit(500)),
-      (snapshot) => {
-        const totalJobs = snapshot.size;
-        const activeJobs = snapshot.docs.filter(
-          (doc) => doc.data().status === 'active'
-        ).length;
-        const completedJobs = snapshot.docs.filter(
-          (doc) => doc.data().status === 'completed'
-        ).length;
-
-        setStats((prevStats) => ({
-          ...prevStats,
-          totalJobs,
-          activeJobs,
-          completedJobs,
-        }));
-
-        // Update chart distribution
-        setChartData((prevData) => ({
-          ...prevData,
-          distribution: [
-            { name: 'Active', value: activeJobs, fill: COLORS.success },
-            { name: 'Completed', value: completedJobs, fill: COLORS.info },
-            { name: 'Pending', value: Math.max(0, totalJobs - activeJobs - completedJobs), fill: COLORS.pending },
-          ],
-        }));
-      },
-      handleSnapshotError('jobs')
-    );
-    unsubscribers.push(jobsUnsub);
-
-    // Subscribe to transactions collection used by the Flutter payment flow.
-    const transactionsUnsub = onSnapshot(
-      query(collection(db, 'transactions'), limit(500)),
-      (snapshot) => {
-        const totalRevenue = snapshot.docs
-          .filter((doc) => doc.data().status === 'completed')
-          .reduce((sum, doc) => {
-            const data = doc.data();
-            return sum + (data.platformFee || data.amount || 0);
-          }, 0);
-
-        const paymentCounts = {
-          completed: 0,
-          pending: 0,
-          failed: 0,
-          refunded: 0,
-        };
-
-        snapshot.docs.forEach((doc) => {
-          const status = doc.data().status;
-          if (Object.prototype.hasOwnProperty.call(paymentCounts, status)) {
-            paymentCounts[status]++;
-          }
-        });
-
-        setStats((prevStats) => ({
-          ...prevStats,
-          totalRevenue,
-        }));
-
-        setChartData((prevData) => ({
-          ...prevData,
-          paymentStatus: [
-            { name: 'Completed', value: paymentCounts.completed, fill: COLORS.success },
-            { name: 'Pending', value: paymentCounts.pending, fill: COLORS.pending },
-            { name: 'Failed', value: paymentCounts.failed, fill: COLORS.error },
-            { name: 'Refunded', value: paymentCounts.refunded, fill: COLORS.info },
-          ],
-        }));
-      },
-      handleSnapshotError('transactions')
-    );
-    unsubscribers.push(transactionsUnsub);
-
-    const disputesUnsub = onSnapshot(
-      query(collection(db, 'disputes'), limit(500)),
-      (snapshot) => {
-        const openDisputes = snapshot.docs.filter(
-          (doc) => isOpenDispute(doc.data().status)
-        ).length;
-
-        setStats((prevStats) => ({
-          ...prevStats,
-          openDisputes,
-        }));
-      },
-      handleSnapshotError('disputes')
-    );
-    unsubscribers.push(disputesUnsub);
-
-    const refundsUnsub = onSnapshot(
-      query(collection(db, 'refunds'), limit(500)),
-      (snapshot) => {
-        const pendingRefunds = snapshot.docs.filter(
-          (doc) => isActiveRefund(doc.data().status)
-        ).length;
-
-        setStats((prevStats) => ({
-          ...prevStats,
-          pendingRefunds,
-        }));
-      },
-      handleSnapshotError('refunds')
-    );
-    unsubscribers.push(refundsUnsub);
-
-    // Subscribe to audit logs
-    const auditUnsub = onSnapshot(
-      query(
-        collection(db, 'auditLogs'),
-        orderBy('timestamp', 'desc'),
-        limit(10)
-      ),
-      (snapshot) => {
-        const activity = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setRecentActivity(activity);
-      },
-      handleSnapshotError('audit logs')
-    );
-    unsubscribers.push(auditUnsub);
-
-    setLoading(false);
-
-    // Cleanup all subscriptions on unmount
-    return () => {
-      unsubscribers.forEach((unsub) => unsub());
-    };
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
   }, []);
 
+  const markLoaded = useCallback((key) => {
+    if (!isMounted.current) return;
+    setLoaded((prev) => ({ ...prev, [key]: true }));
+  }, []);
+
+  const addError = useCallback((msg) => {
+    if (!isMounted.current) return;
+    setErrors((prev) => (prev.includes(msg) ? prev : [...prev, msg]));
+  }, []);
+
+  const isFullyLoaded = Object.values(loaded).every(Boolean);
+
+  // ---------------------------------------------------------------------------
+  // Real-time listeners
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const unsubs = [];
+
+    // -- Users --
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'users'), limit(500)),
+        (snap) => {
+          if (!isMounted.current) return;
+          const pendingApprovals = snap.docs.filter((d) =>
+            isPendingVerification(d.data().verificationStatus)
+          ).length;
+          setStats((prev) => ({ ...prev, totalUsers: snap.size, pendingApprovals }));
+          markLoaded('users');
+        },
+        (err) => {
+          console.error('Dashboard users listener:', err);
+          addError('Unable to load user data.');
+          markLoaded('users');
+        }
+      )
+    );
+
+    // -- Jobs --
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'jobs'), limit(500)),
+        (snap) => {
+          if (!isMounted.current) return;
+          const activeJobs = snap.docs.filter((d) => d.data().status === 'active').length;
+          const completedJobs = snap.docs.filter((d) => d.data().status === 'completed').length;
+
+          setStats((prev) => ({
+            ...prev,
+            totalJobs: snap.size,
+            activeJobs,
+            completedJobs,
+          }));
+
+          setChartData((prev) => ({
+            ...prev,
+            distribution: [
+              { name: 'Active', value: activeJobs, fill: COLORS.success },
+              { name: 'Completed', value: completedJobs, fill: COLORS.info },
+              {
+                name: 'Pending',
+                value: Math.max(0, snap.size - activeJobs - completedJobs),
+                fill: COLORS.pending,
+              },
+            ],
+          }));
+
+          // Populate the "jobs" line in the 7-day timeline from completedAt timestamps
+          setChartData((prev) => {
+            const timeline = prev.timeline.map((day) => ({ ...day }));
+            snap.docs.forEach((d) => {
+              const data = d.data();
+              if (data.status !== 'completed' || !data.completedAt) return;
+              const ts =
+                data.completedAt instanceof Timestamp
+                  ? data.completedAt.toDate()
+                  : new Date(data.completedAt);
+              const dateStr = ts.toDateString();
+              const slot = timeline.find((t) => t.date === dateStr);
+              if (slot) slot.jobs += 1;
+            });
+            return { ...prev, timeline };
+          });
+
+          markLoaded('jobs');
+        },
+        (err) => {
+          console.error('Dashboard jobs listener:', err);
+          addError('Unable to load job data. Check Firestore permissions.');
+          markLoaded('jobs');
+        }
+      )
+    );
+
+    // -- Transactions --
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'transactions'), limit(500)),
+        (snap) => {
+          if (!isMounted.current) return;
+
+          const paymentCounts = { completed: 0, pending: 0, failed: 0, refunded: 0 };
+          let totalRevenue = 0;
+
+          // Build 7-day revenue timeline
+          const timelineRevenue = {};
+
+          snap.docs.forEach((d) => {
+            const data = d.data();
+            const status = data.status;
+
+            if (Object.prototype.hasOwnProperty.call(paymentCounts, status)) {
+              paymentCounts[status]++;
+            }
+
+            if (status === 'completed') {
+              totalRevenue += data.platformFee || data.amount || 0;
+
+              // Map to timeline day
+              const raw = data.completedAt || data.createdAt;
+              if (raw) {
+                const ts = raw instanceof Timestamp ? raw.toDate() : new Date(raw);
+                const dateStr = ts.toDateString();
+                timelineRevenue[dateStr] =
+                  (timelineRevenue[dateStr] || 0) + (data.platformFee || data.amount || 0);
+              }
+            }
+          });
+
+          setStats((prev) => ({ ...prev, totalRevenue }));
+
+          setChartData((prev) => {
+            const timeline = prev.timeline.map((day) => ({
+              ...day,
+              revenue: timelineRevenue[day.date] || day.revenue,
+            }));
+
+            return {
+              ...prev,
+              timeline,
+              paymentStatus: [
+                { name: 'Completed', value: paymentCounts.completed, fill: COLORS.success },
+                { name: 'Pending', value: paymentCounts.pending, fill: COLORS.pending },
+                { name: 'Failed', value: paymentCounts.failed, fill: COLORS.error },
+                { name: 'Refunded', value: paymentCounts.refunded, fill: COLORS.info },
+              ],
+            };
+          });
+
+          markLoaded('transactions');
+        },
+        (err) => {
+          console.error('Dashboard transactions listener:', err);
+          addError('Unable to load transaction data. Check Firestore permissions.');
+          markLoaded('transactions');
+        }
+      )
+    );
+
+    // -- Disputes (collection may not exist yet — handle gracefully) --
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'disputes'), limit(500)),
+        (snap) => {
+          if (!isMounted.current) return;
+          const openDisputes = snap.docs.filter((d) => isOpenDispute(d.data().status)).length;
+          setStats((prev) => ({ ...prev, openDisputes }));
+          markLoaded('disputes');
+        },
+        (err) => {
+          console.error('Dashboard disputes listener:', err);
+          // Non-fatal — disputes collection may simply not exist yet
+          markLoaded('disputes');
+        }
+      )
+    );
+
+    // -- Refunds --
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'refunds'), limit(500)),
+        (snap) => {
+          if (!isMounted.current) return;
+          const pendingRefunds = snap.docs.filter((d) => isActiveRefund(d.data().status)).length;
+          setStats((prev) => ({ ...prev, pendingRefunds }));
+          markLoaded('refunds');
+        },
+        (err) => {
+          console.error('Dashboard refunds listener:', err);
+          markLoaded('refunds');
+        }
+      )
+    );
+
+    // -- Audit logs  (your Firestore uses 'audit_logs', not 'auditLogs') --
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'audit_logs'), orderBy('timestamp', 'desc'), limit(10)),
+        (snap) => {
+          if (!isMounted.current) return;
+          setRecentActivity(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          markLoaded('auditLogs');
+        },
+        (err) => {
+          console.error('Dashboard audit_logs listener:', err);
+          addError('Unable to load recent activity. Check Firestore permissions.');
+          markLoaded('auditLogs');
+        }
+      )
+    );
+
+    return () => unsubs.forEach((u) => u());
+  }, [markLoaded, addError]);
+
+  // ---------------------------------------------------------------------------
+  // Derived values
+  // ---------------------------------------------------------------------------
+  const pendingTotal = stats.pendingApprovals + stats.openDisputes + stats.pendingRefunds;
+
+  // Compute payment total once — not inside render loop
+  const paymentTotal = chartData.paymentStatus.reduce((sum, s) => sum + s.value, 0);
+
+  // ---------------------------------------------------------------------------
+  // Table columns
+  // ---------------------------------------------------------------------------
   const activityColumns = [
     {
       key: 'adminId',
       label: 'Admin',
-      render: (value) => value?.substring(0, 8) || '-',
+      render: (value) => (
+        <Typography
+          variant="body2"
+          sx={{
+            fontFamily: 'monospace',
+            backgroundColor: COLORS.gray200,
+            px: 1,
+            py: 0.25,
+            borderRadius: 1,
+            display: 'inline-block',
+          }}
+        >
+          {value?.substring(0, 8) || '-'}
+        </Typography>
+      ),
     },
     {
       key: 'action',
       label: 'Action',
-      render: (value) => value?.replace(/_/g, ' ').toUpperCase() || '-',
+      render: (value) => {
+        const label = value?.replace(/_/g, ' ') || '-';
+        const isDestructive = ['delete', 'ban', 'reject'].some((k) =>
+          value?.toLowerCase().includes(k)
+        );
+        return (
+          <Chip
+            label={label.toUpperCase()}
+            size="small"
+            sx={{
+              backgroundColor: isDestructive
+                ? `${COLORS.error}18`
+                : `${COLORS.success}18`,
+              color: isDestructive ? COLORS.error : COLORS.success,
+              fontWeight: 600,
+              fontSize: '0.7rem',
+            }}
+          />
+        );
+      },
     },
     {
       key: 'timestamp',
       label: 'Date & Time',
-      render: (value) => formatDateTime(value),
+      render: (value) => (
+        <Typography variant="body2" sx={{ color: COLORS.gray600 }}>
+          {formatDateTime(value)}
+        </Typography>
+      ),
     },
   ];
 
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
   return (
     <Box sx={{ animation: 'fadeIn 0.3s ease-in-out' }}>
-      {/* Page Header */}
+      {/* Header */}
       <Box sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
         <Typography
           variant="h3"
@@ -275,110 +468,86 @@ export default function Dashboard() {
         >
           Dashboard
         </Typography>
-        <Typography
-          variant="body2"
-          sx={{
-            color: COLORS.gray600,
-            fontSize: { xs: '0.85rem', sm: '0.95rem' },
-          }}
-        >
+        <Typography variant="body2" sx={{ color: COLORS.gray600 }}>
           Welcome back! Here's what's happening with your platform today.
         </Typography>
       </Box>
 
-      {dashboardError && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          {dashboardError}
+      {/* Errors */}
+      {errors.map((err) => (
+        <Alert
+          key={err}
+          severity="warning"
+          onClose={() => setErrors((prev) => prev.filter((e) => e !== err))}
+          sx={{ mb: 2 }}
+        >
+          {err}
         </Alert>
-      )}
+      ))}
 
-      {/* Key Performance Indicators */}
-      <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Total Users"
-            value={stats.totalUsers}
-            icon={PeopleIcon}
-            loading={loading}
-            color={COLORS.success}
-            trend={8}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Active Jobs"
-            value={stats.activeJobs}
-            subtitle={`of ${stats.totalJobs} total`}
-            icon={WorkIcon}
-            loading={loading}
-            color={COLORS.primary}
-            trend={12}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Total Revenue"
-            value={formatCurrency(stats.totalRevenue)}
-            icon={CheckCircleIcon}
-            loading={loading}
-            color={COLORS.success}
-            trend={15}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Pending Items"
-            value={stats.pendingApprovals + stats.openDisputes + stats.pendingRefunds}
-            subtitle={`${stats.pendingApprovals} verifications, ${stats.openDisputes} disputes, ${stats.pendingRefunds} refunds`}
-            icon={WarningIcon}
-            loading={loading}
-            color={COLORS.pending}
-            trend={-3}
-          />
-        </Grid>
+      {/* KPI Cards */}
+      <Grid container spacing={{ xs: 2, md: 3 }} sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
+        {[
+          {
+            title: 'Total Users',
+            value: stats.totalUsers,
+            icon: PeopleIcon,
+            color: COLORS.success,
+            loadKey: 'users',
+          },
+          {
+            title: 'Active Jobs',
+            value: stats.activeJobs,
+            subtitle: `of ${stats.totalJobs} total`,
+            icon: WorkIcon,
+            color: COLORS.primary,
+            loadKey: 'jobs',
+          },
+          {
+            title: 'Total Revenue',
+            value: formatCurrency(stats.totalRevenue),
+            icon: CheckCircleIcon,
+            color: COLORS.success,
+            loadKey: 'transactions',
+          },
+          {
+            title: 'Pending Items',
+            value: pendingTotal,
+            subtitle: `${stats.pendingApprovals} verifications · ${stats.openDisputes} disputes · ${stats.pendingRefunds} refunds`,
+            icon: WarningIcon,
+            color: COLORS.pending,
+            loadKey: 'users',
+          },
+        ].map((card) => (
+          <Grid item xs={12} sm={6} md={3} key={card.title}>
+            <StatCard {...card} loading={!loaded[card.loadKey]} />
+          </Grid>
+        ))}
       </Grid>
 
-      {/* Charts Section */}
-      <Grid container spacing={{ xs: 2, sm: 2, md: 3 }} sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
-        {/* Revenue & Activity Timeline */}
+      {/* Charts */}
+      <Grid container spacing={{ xs: 2, md: 3 }} sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
+
+        {/* 7-Day Performance Line Chart */}
         <Grid item xs={12} md={8}>
-          <Card
-            sx={{
-              boxShadow: SHADOWS.sm,
-              transition: TRANSITIONS.smooth,
-              '&:hover': {
-                boxShadow: SHADOWS.md,
-              },
-            }}
-          >
+          <Card sx={{ boxShadow: SHADOWS.sm, '&:hover': { boxShadow: SHADOWS.md }, transition: TRANSITIONS.smooth }}>
             <CardContent>
-              <Typography
-                variant="h6"
-                sx={{
-                  fontWeight: 700,
-                  mb: 3,
-                  color: COLORS.gray900,
-                }}
-              >
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 3, color: COLORS.gray900 }}>
                 7-Day Performance
               </Typography>
-              {loading ? (
-                <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <LinearProgress sx={{ width: '100%' }} />
-                </Box>
+              {!loaded.transactions ? (
+                <ChartSkeleton height={300} />
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={chartData.timeline}>
                     <CartesianGrid strokeDasharray="3 3" stroke={COLORS.divider} />
-                    <XAxis dataKey="day" stroke={COLORS.gray600} />
-                    <YAxis stroke={COLORS.gray600} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: COLORS.surface,
-                        border: `1px solid ${COLORS.divider}`,
-                        borderRadius: '8px',
-                      }}
+                    <XAxis
+                      dataKey="day"
+                      stroke={COLORS.gray600}
+                      tick={{ fontSize: 11 }}
                     />
+                    <YAxis stroke={COLORS.gray600} tick={{ fontSize: 11 }} />
+                    <Tooltip content={<CustomTooltip />} />
                     <Legend />
                     <Line
                       type="monotone"
@@ -403,32 +572,15 @@ export default function Dashboard() {
           </Card>
         </Grid>
 
-        {/* Job Status Distribution */}
+        {/* Job Status Pie */}
         <Grid item xs={12} sm={6} md={4}>
-          <Card
-            sx={{
-              boxShadow: SHADOWS.sm,
-              transition: TRANSITIONS.smooth,
-              '&:hover': {
-                boxShadow: SHADOWS.md,
-              },
-            }}
-          >
+          <Card sx={{ boxShadow: SHADOWS.sm, '&:hover': { boxShadow: SHADOWS.md }, transition: TRANSITIONS.smooth }}>
             <CardContent>
-              <Typography
-                variant="h6"
-                sx={{
-                  fontWeight: 700,
-                  mb: 3,
-                  color: COLORS.gray900,
-                }}
-              >
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 3, color: COLORS.gray900 }}>
                 Job Status
               </Typography>
-              {loading ? (
-                <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <LinearProgress sx={{ width: '100%' }} />
-                </Box>
+              {!loaded.jobs ? (
+                <ChartSkeleton height={300} />
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
@@ -439,11 +591,10 @@ export default function Dashboard() {
                       labelLine={false}
                       label={({ name, value }) => `${name}: ${value}`}
                       outerRadius={80}
-                      fill="#8884d8"
                       dataKey="value"
                     >
-                      {chartData.distribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      {chartData.distribution.map((entry, i) => (
+                        <Cell key={`cell-${i}`} fill={entry.fill} />
                       ))}
                     </Pie>
                     <Tooltip />
@@ -454,40 +605,25 @@ export default function Dashboard() {
           </Card>
         </Grid>
 
-        {/* Payment Status */}
+        {/* Payment Status Progress Bars */}
         <Grid item xs={12} sm={6} md={4}>
-          <Card
-            sx={{
-              boxShadow: SHADOWS.sm,
-              transition: TRANSITIONS.smooth,
-              '&:hover': {
-                boxShadow: SHADOWS.md,
-              },
-            }}
-          >
+          <Card sx={{ boxShadow: SHADOWS.sm, '&:hover': { boxShadow: SHADOWS.md }, transition: TRANSITIONS.smooth }}>
             <CardContent>
-              <Typography
-                variant="h6"
-                sx={{
-                  fontWeight: 700,
-                  mb: 3,
-                  color: COLORS.gray900,
-                }}
-              >
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 3, color: COLORS.gray900 }}>
                 Payment Status
               </Typography>
-              {loading ? (
-                <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <LinearProgress sx={{ width: '100%' }} />
+              {!loaded.transactions ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {[1, 2, 3, 4].map((i) => (
+                    <Box key={i}>
+                      <Skeleton width="40%" height={20} sx={{ mb: 0.5 }} />
+                      <Skeleton variant="rectangular" height={8} sx={{ borderRadius: 1 }} />
+                    </Box>
+                  ))}
                 </Box>
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {chartData.paymentStatus.map((item) => {
-                    const paymentTotal = chartData.paymentStatus.reduce(
-                      (sum, status) => sum + status.value,
-                      0
-                    );
-                    return (
+                  {chartData.paymentStatus.map((item) => (
                     <Box key={item.name}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.gray900 }}>
@@ -495,6 +631,15 @@ export default function Dashboard() {
                         </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 700, color: item.fill }}>
                           {item.value}
+                          {paymentTotal > 0 && (
+                            <Typography
+                              component="span"
+                              variant="caption"
+                              sx={{ color: COLORS.gray600, ml: 0.5 }}
+                            >
+                              ({Math.round(safePercent(item.value, paymentTotal))}%)
+                            </Typography>
+                          )}
                         </Typography>
                       </Box>
                       <LinearProgress
@@ -511,8 +656,7 @@ export default function Dashboard() {
                         }}
                       />
                     </Box>
-                    );
-                  })}
+                  ))}
                 </Box>
               )}
             </CardContent>
@@ -530,97 +674,69 @@ export default function Dashboard() {
         }}
       >
         <CardContent>
-          <Typography
-            variant="h6"
-            sx={{
-              fontWeight: 700,
-              mb: 2,
-              color: COLORS.gray900,
-            }}
-          >
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, color: COLORS.gray900 }}>
             Quick Actions
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <Button
-              variant="contained"
-              href="/users?filter=pending"
-              sx={{
-                bgColor: COLORS.primary,
-                textTransform: 'none',
-                fontWeight: 600,
-              }}
-            >
-              Verify Caregivers ({stats.pendingApprovals})
-            </Button>
-            <Button
-              variant="outlined"
-              href="/jobs"
-              sx={{
-                textTransform: 'none',
-                fontWeight: 600,
-              }}
-            >
-              Review Jobs
-            </Button>
-            <Button
-              variant="outlined"
-              href="/disputes"
-              sx={{
-                textTransform: 'none',
-                fontWeight: 600,
-              }}
-            >
-              Resolve Disputes ({stats.openDisputes})
-            </Button>
-            <Button
-              variant="outlined"
-              href="/refunds"
-              sx={{
-                textTransform: 'none',
-                fontWeight: 600,
-              }}
-            >
-              Review Refunds ({stats.pendingRefunds})
-            </Button>
-            <Button
-              variant="outlined"
-              href="/payments"
-              sx={{
-                textTransform: 'none',
-                fontWeight: 600,
-              }}
-            >
-              Manage Payouts
-            </Button>
+            {[
+              {
+                label: `Verify Caregivers (${stats.pendingApprovals})`,
+                href: '/users?filter=pending',
+                variant: 'contained',
+                show: true,
+              },
+              {
+                label: 'Review Jobs',
+                href: '/jobs',
+                variant: 'outlined',
+                show: true,
+              },
+              {
+                label: `Resolve Disputes (${stats.openDisputes})`,
+                href: '/disputes',
+                variant: 'outlined',
+                show: true,
+              },
+              {
+                label: `Review Refunds (${stats.pendingRefunds})`,
+                href: '/refunds',
+                variant: 'outlined',
+                show: true,
+              },
+              {
+                label: 'Manage Payouts',
+                href: '/payments',
+                variant: 'outlined',
+                show: true,
+              },
+            ].map(({ label, href, variant }) => (
+              <Button
+                key={href}
+                variant={variant}
+                href={href}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  ...(variant === 'contained' && { backgroundColor: COLORS.primary }),
+                }}
+              >
+                {label}
+              </Button>
+            ))}
           </Box>
         </CardContent>
       </Card>
 
       {/* Recent Activity */}
-      <Card
-        sx={{
-          boxShadow: SHADOWS.sm,
-          transition: TRANSITIONS.smooth,
-          '&:hover': {
-            boxShadow: SHADOWS.md,
-          },
-        }}
-      >
+      <Card sx={{ boxShadow: SHADOWS.sm, '&:hover': { boxShadow: SHADOWS.md }, transition: TRANSITIONS.smooth }}>
         <CardContent>
-          <Typography
-            variant="h6"
-            sx={{
-              fontWeight: 700,
-              mb: 3,
-              color: COLORS.gray900,
-            }}
-          >
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 3, color: COLORS.gray900 }}>
             Recent Activity
           </Typography>
           <DataTable
             columns={activityColumns}
             data={recentActivity}
-            loading={loading}
+            loading={!loaded.auditLogs}
             emptyMessage="No recent activity"
           />
         </CardContent>
