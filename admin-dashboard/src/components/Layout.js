@@ -66,6 +66,8 @@ function DrawerContent({ visibleMenuItems, router, onItemClick }) {
             mb: 0.5,
             letterSpacing: '-0.5px',
             fontSize: { xs: '1.25rem', sm: '1.5rem' },
+            display: { xs: 'none', sm: 'block' },
+            color: 'white',
           }}
         >
           CareLink
@@ -74,7 +76,7 @@ function DrawerContent({ visibleMenuItems, router, onItemClick }) {
           variant="caption"
           sx={{
             color: 'rgba(255,255,255,0.6)',
-            display: 'block',
+            display: { xs: 'none', sm: 'block' },
             marginTop: '4px',
             fontSize: { xs: '0.7rem', sm: '0.75rem' },
           }}
@@ -103,6 +105,7 @@ function DrawerContent({ visibleMenuItems, router, onItemClick }) {
                     transition: TRANSITIONS.smooth,
                     px: { xs: 1, sm: 1.5 },
                     py: { xs: 0.75, sm: 1 },
+                    minHeight: { xs: 48, sm: 56 },
                     '&:hover': {
                       backgroundColor: 'rgba(76, 175, 80, 0.1)',
                     },
@@ -119,6 +122,7 @@ function DrawerContent({ visibleMenuItems, router, onItemClick }) {
                       color: isActive ? COLORS.primary : 'rgba(255,255,255,0.6)',
                       minWidth: { xs: 36, sm: 40 },
                       transition: TRANSITIONS.fast,
+                      justifyContent: 'center',
                     }}
                   >
                     <IconComponent fontSize="small" />
@@ -130,6 +134,8 @@ function DrawerContent({ visibleMenuItems, router, onItemClick }) {
                       sx: {
                         fontWeight: isActive ? 600 : 500,
                         fontSize: { xs: '0.875rem', sm: '0.95rem' },
+                        display: { xs: 'none', sm: 'block' },
+                        whiteSpace: 'nowrap',
                       },
                     }}
                   />

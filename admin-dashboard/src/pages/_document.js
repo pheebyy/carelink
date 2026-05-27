@@ -6,16 +6,13 @@ export default function Document() {
       <Head>
         {/* Mobile Meta Tags */}
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover" />
         <meta name="theme-color" content="#4CAF50" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        
         {/* Apple Specific */}
         <meta name="apple-mobile-web-app-title" content="CareLink Admin" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-        
         {/* Fonts - Roboto from Google Fonts */}
         <link
           rel="preconnect"

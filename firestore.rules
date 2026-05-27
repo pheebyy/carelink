@@ -501,6 +501,11 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ========================= PAYMENTS COLLECTION (TOP LEVEL) =========================
+    match /payments/{paymentId} {
+      allow read, write: if isAdmin();
+    }
+
     // ========================= DENY ALL OTHER ACCESS =========================
     match /{document=**} {
       allow read, write: if false;

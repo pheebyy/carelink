@@ -135,8 +135,12 @@ export default function UsersPage() {
         updateData.verificationNotes = actionReason;
       } else if (actionType === 'suspend') {
         updateData.status = 'suspended';
+        // TODO: Send suspension email here (call backend/email API)
+        // await sendSuspensionEmail(selectedUser.email, actionReason);
       } else if (actionType === 'ban') {
         updateData.status = 'banned';
+        // TODO: Send ban email here (call backend/email API)
+        // await sendBanEmail(selectedUser.email, actionReason);
       }
 
       await updateDoc(userRef, updateData);
