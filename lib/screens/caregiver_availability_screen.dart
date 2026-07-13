@@ -68,7 +68,7 @@ class _CaregiverAvailabilityScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Availability updated successfully'),
+            content: Text(' Availability updated successfully'),
             backgroundColor: Colors.green,
           ),
         );

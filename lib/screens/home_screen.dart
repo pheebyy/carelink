@@ -117,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const Icon(Icons.error_outline, color: Colors.red, size: 60),
               const SizedBox(height: 20),
               const Text(
-                "Couldn't determine your role 😕",
+                "Couldn't determine your role ",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),

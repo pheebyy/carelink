@@ -155,9 +155,9 @@ class _CaregiverVerificationScreenState
       final List<Map<String, dynamic>> uploadedDocs = [];
 
       print('🚀 Beginning document upload process for user: $uid');
-      
+
       // Upload practice license
-      print('📄 Uploading practice license...');
+      print(' Uploading practice license...');
       try {
         final licenseResult = await _storageService.uploadVerificationDocument(
           uid: uid,
@@ -181,7 +181,7 @@ class _CaregiverVerificationScreenState
       }
 
       // Upload national ID
-      print('📄 Uploading national ID...');
+      print(' Uploading national ID...');
       try {
         final idResult = await _storageService.uploadVerificationDocument(
           uid: uid,
@@ -198,14 +198,14 @@ class _CaregiverVerificationScreenState
           'expiryDate': Timestamp.fromDate(_idExpiryDate!),
         };
         uploadedDocs.add(idDoc);
-        print('✅ National ID uploaded successfully');
+        print(' National ID uploaded successfully');
       } catch (e) {
-        print('🔥 National ID upload failed: $e');
+        print(' National ID upload failed: $e');
         throw Exception('National ID upload failed: $e');
       }
 
       // Upload passport photo
-      print('📄 Uploading passport photo...');
+      print(' Uploading passport photo...');
       try {
         final passportResult = await _storageService.uploadVerificationDocument(
           uid: uid,
@@ -220,22 +220,22 @@ class _CaregiverVerificationScreenState
           'fileName': passportResult['fileName']!,
           'documentValue': _passportNumberCtrl.text.trim(),
         });
-        print('✅ Passport photo uploaded successfully');
+        print(' Passport photo uploaded successfully');
       } catch (e) {
-        print('🔥 Passport photo upload failed: $e');
+        print(' Passport photo upload failed: $e');
         throw Exception('Passport photo upload failed: $e');
       }
 
       // Submit to Firestore
-      print('💾 Submitting documents to Firestore...');
+      print(' Submitting documents to Firestore...');
       try {
         await _firestoreService.submitVerificationDocuments(
           caregiverId: uid,
           documents: uploadedDocs,
         );
-        print('✅ Documents submitted to Firestore');
+        print(' Documents submitted to Firestore');
       } catch (e) {
-        print('🔥 Firestore submission failed: $e');
+        print(' Firestore submission failed: $e');
         throw Exception('Failed to submit documents: $e');
       }
 
@@ -537,4 +537,3 @@ class _CaregiverVerificationScreenState
     );
   }
 }
-

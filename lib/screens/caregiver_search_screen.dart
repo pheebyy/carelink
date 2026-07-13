@@ -23,7 +23,7 @@ class _CaregiverSearchScreenState extends State<CaregiverSearchScreen> {
     'child care',
     'nursing',
     'overnight',
-    'cooking',
+    'Physiotherapy',
     'Post-surgery care',
     'dementia care'
   ];
