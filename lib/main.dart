@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'firebase_options.dart';
 import 'app_router.dart';
 import 'services/notification_service.dart';
@@ -31,6 +36,24 @@ void _initializeNonCriticalServices() {
   });
 }
 
+void _configureFirebaseEmulators() {
+  final enabled = dotenv.env['USE_FIREBASE_EMULATORS']?.toLowerCase() == 'true';
+  if (!enabled) return;
+
+  final host = kIsWeb
+      ? 'localhost'
+      : defaultTargetPlatform == TargetPlatform.android
+          ? '10.0.2.2'
+          : 'localhost';
+
+  FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
+  FirebaseAuth.instance.useAuthEmulator(host, 9099);
+  FirebaseStorage.instance.useStorageEmulator(host, 9199);
+  FirebaseFunctions.instance.useFunctionsEmulator(host, 5001);
+
+  debugPrint('Firebase emulators enabled on $host');
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -51,6 +74,8 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    _configureFirebaseEmulators();
 
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
     

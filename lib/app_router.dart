@@ -62,6 +62,11 @@ class CarelinkApp extends ConsumerWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Carelink',
+      theme: ThemeData(
+        primarySwatch: Colors.green,
+        useMaterial3: true,
+        scaffoldBackgroundColor: Colors.grey.shade50,
+      ),
       initialRoute: '/login',
       routes: {
         '/login': (context) => const LoginScreen(),

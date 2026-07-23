@@ -1,16 +1,17 @@
 {
-    "cSpell.words": [
-        "allprojects",
-        "caregiverdashboard",
-        "carelink",
-        "dasboard",
-        "geoflutterfire",
-        "paystack"
-    ],
-    "java.configuration.updateBuildConfiguration": "automatic",
-    "files.associations": {
-        "*.dbclient-js": "javascript",
-        "*.embeddedhtml": "html",
-        "variant": "cpp"
+  "cSpell.words": [
+    "allprojects",
+    "caregiverdashboard",
+    "carelink",
+    "dasboard",
+    "geoflutterfire",
+    "paystack"
+  ],
+  "java.import.gradle.enabled": false,
+  "java.configuration.updateBuildConfiguration": "disabled",
+  "files.associations": {
+    "*.dbclient-js": "javascript",
+    "*.embeddedhtml": "html",
+    "variant": "cpp"
     }
 }

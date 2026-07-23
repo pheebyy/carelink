@@ -2,6 +2,7 @@ import 'package:carelink/screens/job_detail_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../services/firestore_service.dart';
+import '../widgets/ux_components.dart';
 
 class AllJobsScreen extends StatefulWidget {
   const AllJobsScreen({super.key});
@@ -274,127 +275,66 @@ class _AllJobsScreenState extends State<AllJobsScreen> {
   }
 
   Widget _buildLoadingState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(color: Colors.green),
-          const SizedBox(height: 16),
-          Text(
-            'Loading all jobs...',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: 6,
+      itemBuilder: (context, index) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
           ),
-        ],
+          child: Row(
+            children: [
+              const SkeletonLoader(height: 50, width: 50),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SkeletonLoader(height: 14, width: MediaQuery.of(context).size.width * 0.4),
+                    const SizedBox(height: 8),
+                    SkeletonLoader(height: 12, width: MediaQuery.of(context).size.width * 0.2),
+                    const SizedBox(height: 8),
+                    SkeletonLoader(height: 12, width: MediaQuery.of(context).size.width * 0.3),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildErrorState(Object? error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, color: Colors.red.shade400, size: 48),
-            const SizedBox(height: 16),
-            Text(
-              'Unable to load jobs',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _shortError(error),
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => setState(() {}),
-              icon: const Icon(Icons.refresh),
-              label: const Text('Try Again'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return ErrorStateWidget(
+      error: _shortError(error),
+      onRetry: () => setState(() {}),
     );
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.work_outline,
-                color: Colors.grey.shade400, size: 48),
-            const SizedBox(height: 16),
-            Text(
-              'No jobs available',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Check back later for new opportunities',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-          ],
-        ),
-      ),
+    return const EmptyStateWidget(
+      title: 'No jobs available',
+      message: 'Check back later for new opportunities',
+      icon: Icons.work_outline,
     );
   }
 
   Widget _buildNoSearchResultsState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search_off, color: Colors.grey.shade400, size: 48),
-            const SizedBox(height: 16),
-            Text(
-              'No jobs found',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Try adjusting your search criteria',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                _searchController.clear();
-                setState(() => _searchQuery = '');
-              },
-              icon: const Icon(Icons.clear),
-              label: const Text('Clear Search'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return EmptyStateWidget(
+      title: 'No jobs found',
+      message: 'Try adjusting your search criteria',
+      icon: Icons.search_off,
+      actionLabel: 'Clear Search',
+      onActionPressed: () {
+        _searchController.clear();
+        setState(() => _searchQuery = '');
+      },
     );
   }
 

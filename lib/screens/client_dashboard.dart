@@ -8,6 +8,7 @@ import 'package:carelink/screens/post_job_screen.dart';
 import 'package:carelink/screens/client_payment_screen.dart';
 import 'package:carelink/screens/care_plan_screen.dart';
 import 'package:carelink/services/firestore_service.dart';
+import 'package:carelink/widgets/ux_components.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -42,7 +43,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      
                       const SizedBox(height: 18),
                       _buildStatsSection(),
                       const SizedBox(height: 24),
@@ -70,18 +70,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
     if (mounted) setState(() {});
   }
 
-  void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 2),
-        backgroundColor: isError ? Colors.red.shade600 : Colors.grey.shade800,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  // ==================== Build Methods ====================
+  // ==================== Component Builders ====================
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: const Color(0xFFF4F7FB),
@@ -91,7 +80,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Client Home',
+            'Client Dashboard',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -111,71 +100,13 @@ class _ClientDashboardState extends State<ClientDashboard> {
       actions: [
         IconButton(
           icon: Icon(Icons.notifications_outlined, color: Colors.grey.shade800),
-          onPressed: () => _showSnackBar('Notifications coming soon'),
+          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Notifications coming soon'), behavior: SnackBarBehavior.floating),
+          ),
         ),
       ],
     );
   }
-
-  Widget _buildWelcomeHeroCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.green.shade600, Colors.teal.shade500],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.teal.shade100,
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.favorite_border, color: Colors.white, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Today at a glance',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Track health updates, visits, and care tasks in one place.',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
 
   Widget _buildStatsSection() {
     return Column(
@@ -224,6 +155,72 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
+  Widget _buildDynamicStatCard({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Stream<int> query,
+  }) {
+    return StreamBuilder<int>(
+      stream: query,
+      builder: (context, snapshot) {
+        final value = snapshot.data ?? 0;
+        final isLoading = snapshot.connectionState == ConnectionState.waiting;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                color.withOpacity(0.08),
+                color.withOpacity(0.03),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withOpacity(0.2)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 18, color: color),
+              ),
+              const SizedBox(height: 10),
+              if (isLoading)
+                const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green))
+              else
+                Text(
+                  value.toString(),
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade800,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildUpcomingVisitsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,7 +243,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
               ],
             ),
             TextButton(
-              onPressed: () => _navigateToVisits(),
+              onPressed: _navigateToVisits,
               child: Text(
                 'See all',
                 style: TextStyle(
@@ -273,39 +270,39 @@ class _ClientDashboardState extends State<ClientDashboard> {
           .doc(_uid)
           .collection('visits')
           .where('status', isEqualTo: 'upcoming')
-
           .snapshots(),
       builder: (context, snapshot) {
-        debugPrint('Visits snapshot state: ${snapshot.connectionState}');
-        
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingState('Loading visits...');
+          return Column(
+            children: List.generate(2, (index) => const Padding(
+              padding: EdgeInsets.only(bottom: 10),
+              child: SkeletonLoader(height: 80),
+            )),
+          );
         }
 
         if (snapshot.hasError) {
-          debugPrint('Visits snapshot error: ${snapshot.error}');
-          // Try alternative collection path
-          return _buildAlternativeVisitsView();
+          return ErrorStateWidget(
+            error: 'Unable to load visits',
+            onRetry: () => setState(() {}),
+          );
         }
 
         var visits = snapshot.data?.docs ?? [];
-        debugPrint('Loaded ${visits.length} upcoming visits');
 
-        // Sort by dateTime in Dart (since we can't use orderBy with where clause)
         visits.sort((a, b) {
           final timeA = (a['dateTime'] as Timestamp?)?.toDate() ?? DateTime(2099);
           final timeB = (b['dateTime'] as Timestamp?)?.toDate() ?? DateTime(2099);
-          return timeA.compareTo(timeB); // Ascending order (earliest first)
+          return timeA.compareTo(timeB);
         });
 
-        // Take only first 2
         visits = visits.take(2).toList();
 
         if (visits.isEmpty) {
-          return _buildEmptyState(
+          return const EmptyStateWidget(
             icon: Icons.event_available,
             title: 'No Upcoming Visits',
-            message: 'Your schedule is clear',
+            message: 'Your schedule is clear for now.',
           );
         }
 
@@ -317,8 +314,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
             final serviceType = data['serviceType'] ?? 'Care Visit';
             final status = data['status'] ?? 'scheduled';
 
-            final statusColor =
-                status == 'confirmed' ? Colors.green : Colors.blue;
+            final statusColor = status == 'confirmed' ? Colors.green : Colors.blue;
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -336,12 +332,51 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
-  Widget _buildAlternativeVisitsView() {
-    return _buildErrorState(
-      icon: Icons.event_busy,
-      title: 'Unable to load visits',
-      message: 'Check your Firestore collection permissions',
-      onRetry: () => setState(() {}),
+  Widget _buildVisitItem({
+    required String time,
+    required String name,
+    required String type,
+    required String status,
+    required Color statusColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(10)),
+            child: Icon(Icons.person, color: Colors.green.shade600, size: 24),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(time, style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 4),
+                Text('With: $name', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
+                const SizedBox(height: 2),
+                Text(type, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: statusColor.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+            child: Text(status.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: statusColor)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -356,20 +391,11 @@ class _ClientDashboardState extends State<ClientDashboard> {
             onPressed: _showConfirmAvailabilityDialog,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               elevation: 2,
             ),
             icon: const Icon(Icons.check_circle, color: Colors.white, size: 22),
-            label: const Text(
-              'Confirm Availability',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
+            label: const Text('Confirm Availability', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
           ),
         ),
         const SizedBox(height: 12),
@@ -382,19 +408,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   onPressed: _navigateToCaregivers,
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.blue, width: 2),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   icon: const Icon(Icons.search, color: Colors.blue, size: 20),
-                  label: const Text(
-                    'Find Caregivers',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.blue,
-                    ),
-                  ),
+                  label: const Text('Find Caregivers', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.blue)),
                 ),
               ),
             ),
@@ -406,20 +423,11 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   onPressed: _navigateToPostJob,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 2,
                   ),
                   icon: const Icon(Icons.add_circle, color: Colors.white, size: 20),
-                  label: const Text(
-                    'Post a Job',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
+                  label: const Text('Post a Job', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
                 ),
               ),
             ),
@@ -478,69 +486,45 @@ class _ClientDashboardState extends State<ClientDashboard> {
           .where('participantIds', arrayContains: _uid)
           .snapshots(),
       builder: (context, snapshot) {
-        debugPrint('Messages snapshot state: ${snapshot.connectionState}');
-        
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingState('Loading messages...');
-        }
-
-        if (snapshot.hasError) {
-          final error = snapshot.error.toString();
-          debugPrint('Messages snapshot error: $error');
-          
-          // Check for permission denials
-          bool isPermissionError = error.contains('permission-denied') || error.contains('Permission denied');
-          String errorMessage = isPermissionError 
-              ? 'Permission denied. Check Firestore security rules.'
-              : 'Check your connection and Firestore permissions';
-          
-          return _buildErrorState(
-            icon: Icons.mail_outline,
-            title: 'Unable to load messages',
-            message: errorMessage,
-            onRetry: () => setState(() {}),
+          return Column(
+            children: List.generate(2, (index) => const Padding(
+              padding: EdgeInsets.only(bottom: 10),
+              child: SkeletonLoader(height: 70),
+            )),
           );
         }
 
-        var conversations = snapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-        debugPrint('Loaded ${conversations.length} conversations');
+        if (snapshot.hasError) {
+          return ErrorStateWidget(error: 'Error loading messages', onRetry: () => setState(() {}));
+        }
 
-        // Sort by lastMessageTime in Dart (since we can't use orderBy with arrayContains)
+        var conversations = snapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
         conversations.sort((a, b) {
-          try {
-            final dataA = a.data();
-            final dataB = b.data();
-            final timeA = (dataA['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
-            final timeB = (dataB['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
-            return timeB.compareTo(timeA); // Descending order
-          } catch (e) {
-            debugPrint('Error sorting conversations: $e');
-            return 0;
-          }
+          final timeA = (a.data()['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+          final timeB = (b.data()['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+          return timeB.compareTo(timeA);
         });
 
-        // Take only first 3
         conversations = conversations.take(3).toList();
 
         if (conversations.isEmpty) {
-          return _buildEmptyState(
-            icon: Icons.mail_outline,
+          return const EmptyStateWidget(
+            icon: Icons.chat_bubble_outline,
             title: 'No Messages',
-            message: 'Your conversations will appear here',
+            message: 'Your conversations will appear here.',
           );
         }
 
         return Column(
           children: conversations.map((doc) {
             final data = doc.data();
-            final participantNames =
-                data['participantNames'] as List<dynamic>? ?? [];
+            final participantNames = data['participantNames'] as List<dynamic>? ?? [];
             final lastMessage = data['lastMessage'] as String? ?? '';
             final unreadMap = data['unreadCount'] as Map<dynamic, dynamic>?;
             final unreadCountRaw = unreadMap?[_uid];
-            final unreadCount = unreadCountRaw is int
-                ? unreadCountRaw
-                : int.tryParse(unreadCountRaw?.toString() ?? '0') ?? 0;
+            final unreadCount = unreadCountRaw is int ? unreadCountRaw : 0;
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -554,6 +538,58 @@ class _ClientDashboardState extends State<ClientDashboard> {
           }).toList(),
         );
       },
+    );
+  }
+
+  Widget _buildMessageItem({
+    required String conversationId,
+    required String names,
+    required String message,
+    required int unreadCount,
+  }) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => ConversationChatScreen(conversationId: conversationId)))
+            .then((_) => setState(() => _currentNavIndex = 0));
+      },
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4, offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(10)),
+              child: Icon(Icons.people, color: Colors.green.shade600, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(names, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Text(message, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            if (unreadCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(8)),
+                child: Text('$unreadCount', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -580,10 +616,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
             ),
             TextButton(
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CarePlanScreen()),
-                );
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const CarePlanScreen()));
               },
               child: Text(
                 'View All',
@@ -601,42 +634,25 @@ class _ClientDashboardState extends State<ClientDashboard> {
           stream: _fs.carePlansStream(_uid!),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const SkeletonLoader(height: 100);
             }
+
+            if (snapshot.hasError) return const SizedBox.shrink();
 
             final carePlans = snapshot.data?.docs ?? [];
 
             if (carePlans.isEmpty) {
-              return GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const CarePlanScreen()),
-                  );
+              return EmptyStateWidget(
+                title: 'No Care Plan',
+                message: 'Set up a care plan to improve coordination.',
+                icon: Icons.favorite_border,
+                actionLabel: 'Add Plan',
+                onActionPressed: () {
+                   Navigator.push(context, MaterialPageRoute(builder: (_) => const CarePlanScreen()));
                 },
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add_circle_outline, color: Colors.grey.shade400),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Add your first care plan',
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                    ],
-                  ),
-                ),
               );
             }
 
-            // Show first 2 care plans
             final displayPlans = carePlans.take(2).toList();
 
             return Column(
@@ -650,35 +666,16 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 Color color;
 
                 switch (type) {
-                  case 'medication':
-                    icon = Icons.medication;
-                    color = Colors.blue;
-                    break;
-                  case 'goal':
-                    icon = Icons.trending_up;
-                    color = Colors.green;
-                    break;
-                  case 'appointment':
-                    icon = Icons.calendar_today;
-                    color = Colors.orange;
-                    break;
-                  case 'exercise':
-                    icon = Icons.fitness_center;
-                    color = Colors.purple;
-                    break;
-                  default:
-                    icon = Icons.favorite;
-                    color = Colors.pink;
+                  case 'medication': icon = Icons.medication; color = Colors.blue; break;
+                  case 'goal': icon = Icons.trending_up; color = Colors.green; break;
+                  case 'appointment': icon = Icons.calendar_today; color = Colors.orange; break;
+                  case 'exercise': icon = Icons.fitness_center; color = Colors.purple; break;
+                  default: icon = Icons.favorite; color = Colors.pink;
                 }
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: _buildCarePlanItem(
-                    icon: icon,
-                    title: title,
-                    description: description,
-                    color: color,
-                  ),
+                  child: _buildCarePlanItem(icon: icon, title: title, description: description, color: color),
                 );
               }).toList(),
             );
@@ -688,13 +685,51 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
+  Widget _buildCarePlanItem({
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87)),
+                const SizedBox(height: 4),
+                Text(description, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 22),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAiAssistantCard() {
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const AiAssistantScreen()),
-        ).then((_) => setState(() => _currentNavIndex = 0));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const AiAssistantScreen()))
+            .then((_) => setState(() => _currentNavIndex = 0));
       },
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -711,10 +746,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade600,
-                borderRadius: BorderRadius.circular(10),
-              ),
+              decoration: BoxDecoration(color: Colors.blue.shade600, borderRadius: BorderRadius.circular(10)),
               child: const Icon(Icons.help_outline, color: Colors.white, size: 20),
             ),
             const SizedBox(width: 12),
@@ -722,37 +754,17 @@ class _ClientDashboardState extends State<ClientDashboard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Ask your assistant',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.blue.shade900,
-                    ),
-                  ),
-                  Text(
-                    'About care, visits, or payments...',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.blue.shade800,
-                      height: 1.3,
-                    ),
-                  ),
+                  Text('Ask your assistant', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.blue.shade900)),
+                  Text('About care, visits, or payments...', style: TextStyle(fontSize: 12, color: Colors.blue.shade800, height: 1.3)),
                 ],
               ),
             ),
             const SizedBox(width: 8),
             Container(
-              decoration: BoxDecoration(
-                color: Colors.green,
-                borderRadius: BorderRadius.circular(10),
-              ),
+              decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(10)),
               child: IconButton(
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AiAssistantScreen()),
-                  );
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AiAssistantScreen()));
                 },
                 icon: const Icon(Icons.arrow_forward, color: Colors.white, size: 18),
                 padding: const EdgeInsets.all(8),
@@ -773,659 +785,86 @@ class _ClientDashboardState extends State<ClientDashboard> {
       selectedItemColor: Colors.green,
       unselectedItemColor: Colors.grey.shade600,
       elevation: 8,
-      onTap: (index) => _navigateToPage(index),
+      onTap: _navigateToPage,
       items: const [
         BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Dashboard'),
         BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), label: 'Visits'),
         BottomNavigationBarItem(icon: Icon(Icons.chat_outlined), label: 'Messages'),
         BottomNavigationBarItem(icon: Icon(Icons.wallet_giftcard_outlined), label: 'Payments'),
-        BottomNavigationBarItem(icon: Icon(Icons.person_outlined), label: 'Profile'),
+        BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
       ],
     );
   }
 
-  // ==================== Component Builders ====================
-  Widget _buildLoadingState(String message) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(color: Colors.green),
-          const SizedBox(height: 12),
-          Text(
-            message,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-          ),
-        ],
-      ),
-    );
+  // ==================== Stream Queries ====================
+  Stream<int> _getVisitsToday() {
+    if (_uid == null) return Stream.value(0);
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    return FirebaseFirestore.instance
+        .collection('users').doc(_uid).collection('visits')
+        .where('dateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+        .where('dateTime', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
+        .snapshots().map((s) => s.docs.length);
   }
 
-  Widget _buildErrorState({
-    required IconData icon,
-    required String title,
-    required String message,
-    required VoidCallback onRetry,
-  }) {
-    // Safely truncate error message
-    String displayMessage = message;
-    if (message.contains(':')) {
-      // Extract the meaningful part of Firebase error
-      displayMessage = message.split(':').last.trim();
-    }
-    if (displayMessage.length > 50) {
-      displayMessage = '${displayMessage.substring(0, 50)}...';
-    }
-    if (displayMessage.isEmpty) {
-      displayMessage = 'Please try again';
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.shade200),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.red.shade600, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red.shade700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  displayMessage,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.red.shade600,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          SizedBox(
-            height: 32,
-            width: 32,
-            child: IconButton.filled(
-              onPressed: onRetry,
-              style: IconButton.styleFrom(backgroundColor: Colors.red.shade100),
-              icon: Icon(Icons.refresh, color: Colors.red.shade600, size: 18),
-              padding: EdgeInsets.zero,
-            ),
-          ),
-        ],
-      ),
-    );
+  Stream<int> _getUnreadMessagesCount() {
+    if (_uid == null) return Stream.value(0);
+    return FirebaseFirestore.instance
+        .collection('conversations').where('participantIds', arrayContains: _uid)
+        .snapshots().map((s) {
+          int count = 0;
+          for (var d in s.docs) {
+            count += (d.data()['unreadCount']?[_uid] ?? 0) as int;
+          }
+          return count;
+        });
   }
 
-  Widget _buildEmptyState({
-    required IconData icon,
-    required String title,
-    required String message,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 40, color: Colors.grey.shade400),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            message,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDynamicStatCard({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required Stream<int> query,
-  }) {
-    return StreamBuilder<int>(
-      stream: query,
-      builder: (context, snapshot) {
-        final value = snapshot.data ?? 0;
-        final isLoading = snapshot.connectionState == ConnectionState.waiting;
-
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.2)),
-          ),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 16, color: color),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: color,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              if (isLoading)
-                SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: color,
-                  ),
-                )
-              else
-                Text(
-                  value.toString(),
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade800,
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildVisitItem({
-    required String time,
-    required String name,
-    required String type,
-    required String status,
-    required Color statusColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: Colors.green.shade100,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.person, color: Colors.green.shade600, size: 24),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  time,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'With: $name',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  type,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              status.toUpperCase(),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: statusColor,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCarePlanItem({
-    required IconData icon,
-    required String title,
-    required String description,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 22),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessageItem({
-    required String conversationId,
-    required String names,
-    required String message,
-    required int unreadCount,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ConversationChatScreen(conversationId: conversationId),
-          ),
-        ).then((_) => setState(() => _currentNavIndex = 0));
-      },
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: Colors.green.shade100,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(Icons.people, color: Colors.green.shade600, size: 24),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    names,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    message,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            if (unreadCount > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.blue,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$unreadCount',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
+  Stream<int> _getPendingPaymentsCount() {
+    if (_uid == null) return Stream.value(0);
+    return FirebaseFirestore.instance
+        .collection('users').doc(_uid).collection('payments')
+        .where('status', isEqualTo: 'pending')
+        .snapshots().map((s) => s.docs.length);
   }
 
   // ==================== Navigation Methods ====================
   void _navigateToPage(int index) {
     if (index == _currentNavIndex && index == 0) return;
-
     setState(() => _currentNavIndex = index);
-
     switch (index) {
-      case 0:
-        break;
-      case 1:
-        _navigateToVisits();
-        break;
-      case 2:
-        _navigateToMessages();
-        break;
-      case 3:
-        _navigateToPayments();
-        break;
-      case 4:
-        _navigateToProfile();
-        break;
+      case 1: _navigateToVisits(); break;
+      case 2: _navigateToMessages(); break;
+      case 3: _navigateToPayments(); break;
+      case 4: _navigateToProfile(); break;
     }
   }
 
   void _navigateToVisits() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const VisitsScreen()),
-    ).then((_) => setState(() => _currentNavIndex = 0));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const VisitsScreen())).then((_) => setState(() => _currentNavIndex = 0));
   }
-
   void _navigateToMessages() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ConversationsInboxScreen()),
-    ).then((_) => setState(() => _currentNavIndex = 0));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const ConversationsInboxScreen())).then((_) => setState(() => _currentNavIndex = 0));
   }
-
   void _navigateToPayments() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => ClientPaymentScreen(caregiverId: '', caregiverName: '')),
-    ).then((_) => setState(() => _currentNavIndex = 0));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ClientPaymentScreen(caregiverId: '', caregiverName: ''))).then((_) => setState(() => _currentNavIndex = 0));
   }
-
   void _navigateToCaregivers() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const SearchCaregiversScreen()),
-    ).then((_) => setState(() => _currentNavIndex = 0));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchCaregiversScreen())).then((_) => setState(() => _currentNavIndex = 0));
   }
-
   void _navigateToPostJob() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const PostJobScreen()),
-    ).then((_) => setState(() => _currentNavIndex = 0));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const PostJobScreen())).then((_) => setState(() => _currentNavIndex = 0));
   }
-
   void _navigateToProfile() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => ClientProfileEditScreen()),
-    ).then((_) => setState(() => _currentNavIndex = 0));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ClientProfileEditScreen())).then((_) => setState(() => _currentNavIndex = 0));
   }
 
-  // Unused payment options sheet - removed to avoid warning
-  // void _showPaymentOptionsSheet() {
-  //   showModalBottomSheet(
-  //     context: context,
-  //     builder: (context) => _buildPaymentOptionsSheet(),
-  //     shape: const RoundedRectangleBorder(
-  //       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-  //     ),
-  //   );
-  // }
-
-  // Widget _buildPaymentOptionsSheet() {
-  //   return SafeArea(
-  //     child: Padding(
-  //       padding: const EdgeInsets.all(16),
-  //       child: Column(
-  //         mainAxisSize: MainAxisSize.min,
-  //         crossAxisAlignment: CrossAxisAlignment.start,
-  //         children: [
-  //           Row(
-  //             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-  //             children: [
-  //               const Text(
-  //                 'Make Payment',
-  //                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-  //               ),
-  //               GestureDetector(
-  //                 onTap: () => Navigator.pop(context),
-  //                 child: const Icon(Icons.close),
-  //               ),
-  //             ],
-  //           ),
-  //           const SizedBox(height: 20),
-  //           Expanded(
-  //             child: _buildPaymentsList(),
-  //           ),
-  //         ],
-  //       ),
-  //     ),
-  //   );
-  // }
-
-  // Widget _buildPaymentsList() {
-  //   if (_uid == null) return const SizedBox.shrink();
-  //
-  //   return StreamBuilder<QuerySnapshot>(
-  //     ... (commented out - unused payment sheet method)
-  //   );
-  // }
-
-  // ==================== Stream Queries ====================
-  Stream<int> _getVisitsToday() {
-    if (_uid == null) return Stream.value(0);
-
-    try {
-      final now = DateTime.now();
-      final startOfDay = DateTime(now.year, now.month, now.day);
-      final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
-
-      return FirebaseFirestore.instance
-          .collection('users')
-          .doc(_uid)
-          .collection('visits')
-          .where('dateTime',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
-          .where('dateTime', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
-          .snapshots()
-          .map((snapshot) => snapshot.docs.length)
-          .handleError((error) {
-        debugPrint('Error getting visits: $error');
-        return 0;
-      });
-    } catch (e) {
-      debugPrint('Error in _getVisitsToday: $e');
-      return Stream.value(0);
-    }
-  }
-
-  Stream<int> _getUnreadMessagesCount() {
-    if (_uid == null) return Stream.value(0);
-
-    try {
-      return FirebaseFirestore.instance
-          .collection('conversations')
-          .where('participantIds', arrayContains: _uid)
-          .snapshots()
-          .map((snapshot) {
-            int totalUnread = 0;
-            for (var doc in snapshot.docs) {
-              try {
-                final data = doc.data();
-                final unreadMap = data['unreadCount'] as Map<dynamic, dynamic>?;
-                if (unreadMap != null && unreadMap.containsKey(_uid)) {
-                  totalUnread += (unreadMap[_uid] ?? 0) as int;
-                }
-              } catch (e) {
-                debugPrint('Error processing conversation: $e');
-              }
-            }
-            return totalUnread;
-          })
-          .handleError((error) {
-            debugPrint('Error getting unread messages: $error');
-            return 0;
-          });
-    } catch (e) {
-      debugPrint('Error in _getUnreadMessagesCount: $e');
-      return Stream.value(0);
-    }
-  }
-
-  Stream<int> _getPendingPaymentsCount() {
-    if (_uid == null) return Stream.value(0);
-
-    try {
-      return FirebaseFirestore.instance
-          .collection('users')
-          .doc(_uid)
-          .collection('payments')
-          .where('status', isEqualTo: 'pending')
-          .snapshots()
-          .map((snapshot) => snapshot.docs.length)
-          .handleError((error) {
-            debugPrint('Error getting pending payments: $error');
-            return 0;
-          });
-    } catch (e) {
-      debugPrint('Error in _getPendingPaymentsCount: $e');
-      return Stream.value(0);
-    }
-  }
-
-  // ==================== Utility Methods ====================
   String _formatTime(Timestamp? timestamp) {
     if (timestamp == null) return 'Time not set';
-
-    try {
-      final dateTime = timestamp.toDate();
-      final now = DateTime.now();
-      final difference = dateTime.difference(now);
-
-      if (difference.inDays == 0) {
-        return 'Today • ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-      } else if (difference.inDays == 1) {
-        return 'Tomorrow • ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-      } else {
-        return '${dateTime.day}/${dateTime.month}/${dateTime.year} • ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-      }
-    } catch (e) {
-      debugPrint('Error formatting time: $e');
-      return 'Invalid date';
-    }
+    final dateTime = timestamp.toDate();
+    return 'Today • ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
   void _showConfirmAvailabilityDialog() {
@@ -1435,15 +874,9 @@ class _ClientDashboardState extends State<ClientDashboard> {
         title: const Text('Confirm Availability'),
         content: const Text('Are you available for upcoming visits?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showSnackBar('Availability confirmed');
-            },
+            onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Availability confirmed'))); },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             child: const Text('Confirm'),
           ),
@@ -1453,21 +886,12 @@ class _ClientDashboardState extends State<ClientDashboard> {
   }
 
   Widget _buildLoginRequiredWidget() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.login, size: 48, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          const Text('Please login again'),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('Go Back'),
-          ),
-        ],
-      ),
+    return EmptyStateWidget(
+      title: 'Login Required',
+      message: 'Please log in again to access your dashboard.',
+      icon: Icons.login,
+      actionLabel: 'Go to Login',
+      onActionPressed: () => Navigator.pop(context),
     );
   }
 }

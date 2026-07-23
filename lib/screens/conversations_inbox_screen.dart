@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'conversations_chat_screen.dart';
 import 'new_conversation_screen.dart';
+import '../widgets/ux_components.dart';
 
 class ConversationsInboxScreen extends StatefulWidget {
   const ConversationsInboxScreen({super.key});
@@ -119,37 +120,41 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
               stream: stream,
               builder: (context, snap) {
                 if (snap.hasError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Error loading conversations',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Please check your connection and try again.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                      ],
-                    ),
+                  return ErrorStateWidget(
+                    error: snap.error.toString(),
+                    onRetry: () => setState(() {}),
                   );
                 }
 
                 if (!snap.hasData) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Colors.green),
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    itemCount: 8,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) => Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          const SkeletonLoader(height: 56, width: 56, borderRadius: BorderRadius.all(Radius.circular(12))),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SkeletonLoader(height: 14, width: MediaQuery.of(context).size.width * 0.5),
+                                const SizedBox(height: 8),
+                                SkeletonLoader(height: 12, width: MediaQuery.of(context).size.width * 0.3),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 }
 
@@ -173,22 +178,12 @@ class _ConversationsInboxScreenState extends State<ConversationsInboxScreen> {
                 }
 
                 if (docs.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.mail_outline, size: 64, color: Colors.grey.shade400),
-                        const SizedBox(height: 16),
-                        Text(
-                          _searchQuery.isEmpty ? 'No conversations yet' : 'No conversations found',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                  return EmptyStateWidget(
+                    title: _searchQuery.isEmpty ? 'No conversations yet' : 'No conversations found',
+                    message: _searchQuery.isEmpty 
+                        ? 'Start messaging caregivers or clients to see them here.'
+                        : 'Try searching for something else.',
+                    icon: Icons.mail_outline,
                   );
                 }
 

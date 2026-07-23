@@ -125,7 +125,20 @@ Create `.env` file in the root directory:
 ```env
 PAYSTACK_PUBLIC_KEY=your_paystack_public_key_here
 SENDGRID_API_KEY=your_sendgrid_api_key_here
+USE_FIREBASE_EMULATORS=false
 ```
+
+To run against the local Firebase emulator suite, set:
+```env
+USE_FIREBASE_EMULATORS=true
+```
+When this is enabled, the Flutter app connects to:
+- Firestore on `8080`
+- Auth on `9099`
+- Storage on `9199`
+- Functions on `5001`
+
+On the Android emulator, the app uses `10.0.2.2` to reach your machine's localhost.
 
 7. **Deploy Firestore security rules**
 ```bash

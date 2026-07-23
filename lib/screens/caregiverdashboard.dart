@@ -4,6 +4,7 @@ import 'package:carelink/screens/all_jobs_screen.dart';
 import 'package:carelink/screens/conversations_inbox_screen.dart';
 import 'package:carelink/screens/caregiver_wallet_screen.dart';
 import 'package:carelink/widgets/ai_assistant_widget.dart';
+import 'package:carelink/widgets/ux_components.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -284,17 +285,32 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
 
   // ==================== State Views ====================
   Widget _buildLoadingState() {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.8,
-        child: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: 4,
+      itemBuilder: (context, index) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: const Row(
             children: [
-              CircularProgressIndicator(color: Colors.green),
-              SizedBox(height: 16),
-              Text('Loading jobs...'),
+              SkeletonLoader(height: 50, width: 50),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SkeletonLoader(height: 14),
+                    SizedBox(height: 8),
+                    SkeletonLoader(height: 12, width: 100),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -303,133 +319,19 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   }
 
   Widget _buildErrorState(Object? error) {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.8,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.error_outline,
-                    size: 60,
-                    color: Colors.red.shade400,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Something went wrong',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade800,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _truncateError(error),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () => setState(() => _retryCounter++),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Try Again'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return ErrorStateWidget(
+      error: _truncateError(error),
+      onRetry: () => setState(() => _retryCounter++),
     );
   }
 
   Widget _buildEmptyState() {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.8,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.work_outline_rounded,
-                    size: 80,
-                    color: Colors.green.shade400,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'No Jobs Available',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade800,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Check back soon for new caregiving opportunities',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.grey.shade600,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: _refresh,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Refresh'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    OutlinedButton.icon(
-                      onPressed: _navigateToAllJobs,
-                      icon: const Icon(Icons.explore),
-                      label: const Text('Browse All'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return EmptyStateWidget(
+      title: 'No Jobs Available',
+      message: 'Check back soon for new caregiving opportunities',
+      icon: Icons.work_outline_rounded,
+      actionLabel: 'Browse All',
+      onActionPressed: _navigateToAllJobs,
     );
   }
 
