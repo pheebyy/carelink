@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+String buildAutoLocationLabel(String? rawLocation) {
+  final trimmed = (rawLocation ?? '').trim();
+  return trimmed.isEmpty ? 'Current location' : trimmed;
+}
+
 /// Map Location Picker Screen
 class MapLocationPickerScreen extends StatefulWidget {
   final double? initialLatitude;
@@ -37,7 +42,7 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
     _latitude = widget.initialLatitude;
     _longitude = widget.initialLongitude;
     _locationNameController = TextEditingController(
-      text: widget.initialLocationName ?? '',
+      text: buildAutoLocationLabel(widget.initialLocationName),
     );
     _getCurrentLocation();
   }
@@ -129,8 +134,8 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
   }
 
   void _confirmLocation() {
-    final locationName = _locationNameController.text.trim();
-    if (_latitude != null && _longitude != null && locationName.isNotEmpty) {
+    if (_latitude != null && _longitude != null) {
+      final locationName = buildAutoLocationLabel(_locationNameController.text);
       Navigator.pop(context, {
         'latitude': _latitude,
         'longitude': _longitude,
@@ -138,7 +143,7 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a location name')),
+        const SnackBar(content: Text('Unable to determine your current location')),
       );
     }
   }

@@ -45,9 +45,8 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-// ---------------------------------------------------------------------------
+
 // Status helpers
-// ---------------------------------------------------------------------------
 const isPendingVerification = (status) =>
   !status || status === 'pending' || status === 'pending_verification';
 
@@ -62,10 +61,10 @@ const safePercent = (value, total) => {
   return Math.min(100, Math.max(0, (value / total) * 100));
 };
 
-// ---------------------------------------------------------------------------
+
 // Build a 7-day timeline skeleton so the chart always has an x-axis to show.
 // Actual values are filled in once transaction data arrives.
-// ---------------------------------------------------------------------------
+
 const buildTimelineSkeleton = () => {
   const days = [];
   for (let i = 6; i >= 0; i--) {
@@ -81,9 +80,9 @@ const buildTimelineSkeleton = () => {
   return days;
 };
 
-// ---------------------------------------------------------------------------
+
 // Custom tooltip for the LineChart
-// ---------------------------------------------------------------------------
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (

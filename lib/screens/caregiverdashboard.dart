@@ -5,9 +5,11 @@ import 'package:carelink/screens/conversations_inbox_screen.dart';
 import 'package:carelink/screens/caregiver_wallet_screen.dart';
 import 'package:carelink/widgets/ai_assistant_widget.dart';
 import 'package:carelink/widgets/ux_components.dart';
+import 'package:carelink/app_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/firestore_service.dart';
 import '../services/ai_service.dart';
 
@@ -19,14 +21,14 @@ class _Constants {
   static const String openStatus = 'open';
 }
 
-class CaregiverDashboard extends StatefulWidget {
+class CaregiverDashboard extends ConsumerStatefulWidget {
   const CaregiverDashboard({super.key});
 
   @override
-  State<CaregiverDashboard> createState() => _CaregiverDashboardState();
+  ConsumerState<CaregiverDashboard> createState() => _CaregiverDashboardState();
 }
 
-class _CaregiverDashboardState extends State<CaregiverDashboard> {
+class _CaregiverDashboardState extends ConsumerState<CaregiverDashboard> {
   late final FirestoreService _fs;
   late final AiService _aiService;
   late PageController _pageController;
@@ -391,12 +393,45 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
       ),
       centerTitle: false,
       actions: [
+        _buildNotificationBell(),
+      ],
+    );
+  }
+
+  Widget _buildNotificationBell() {
+    final unreadCount = ref.watch(unreadNotificationsCountProvider).value ?? 0;
+    
+    return Stack(
+      children: [
         IconButton(
-          icon: Icon(Icons.notifications_outlined,
-              color: Colors.grey.shade800),
-          onPressed: () =>
-              _showSnackBar('Notifications feature coming soon'),
+          icon: Icon(Icons.notifications_outlined, color: Colors.grey.shade800),
+          onPressed: () => Navigator.pushNamed(context, '/notifications'),
         ),
+        if (unreadCount > 0)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 16,
+                minHeight: 16,
+              ),
+              child: Text(
+                '$unreadCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
       ],
     );
   }

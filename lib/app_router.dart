@@ -24,6 +24,7 @@ import 'screens/client_payment_history_screen.dart';
 import 'screens/dispute_and_refund_screen.dart';
 import 'screens/admin_payment_dashboard_screen.dart';
 import 'screens/caregiver_bids_screen.dart';
+import 'screens/notifications_screen.dart';
 import 'Models/Job_model.dart';
 import 'Models/payment_model.dart';
 
@@ -53,6 +54,17 @@ final onboardedProvider = StreamProvider<bool?>((ref) {
       .map((d) => d.data()?['onboarded'] as bool?);
 });
 
+final unreadNotificationsCountProvider = StreamProvider<int>((ref) {
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return Stream.value(0);
+  return FirebaseFirestore.instance
+      .collection('notifications')
+      .where('userId', isEqualTo: user.uid)
+      .where('isRead', isEqualTo: false)
+      .snapshots()
+      .map((snap) => snap.docs.length);
+});
+
 // ─────────────── App Entry ───────────────
 class CarelinkApp extends ConsumerWidget {
   const CarelinkApp({super.key});
@@ -80,6 +92,7 @@ class CarelinkApp extends ConsumerWidget {
         '/caregiver-analytics': (context) => const CaregiverAnalyticsDashboard(),
         '/caregiver-availability': (context) => const CaregiverAvailabilityScreen(),
         '/caregiver-bids': (context) => const CaregiverBidsScreen(),
+        '/notifications': (context) => const NotificationsScreen(),
         '/job-search': (context) => const JobSearchFilterScreen(),
         '/caregiver-payment-history': (context) => const CaregiverPaymentHistoryScreen(),
         '/client-payment-history': (context) => const ClientPaymentHistoryScreen(),

@@ -2,7 +2,13 @@ import 'package:carelink/Models/Job_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'map_location_picker_screen.dart';
+
+String buildAutoLocationLabel(String? rawLocation) {
+  final trimmed = (rawLocation ?? '').trim();
+  return trimmed.isEmpty ? 'Current location' : trimmed;
+}
 
 class PostJobScreen extends StatefulWidget {
   const PostJobScreen({super.key});
@@ -50,12 +56,62 @@ class _PostJobScreenState extends State<PostJobScreen> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadCurrentLocationAutomatically();
+    });
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
     _locationController.dispose();
     _budgetController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadCurrentLocationAutomatically() async {
+    if (_locationController.text.trim().isNotEmpty) {
+      return;
+    }
+
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _locationController.text = buildAutoLocationLabel(_locationController.text);
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _locationController.text = buildAutoLocationLabel(_locationController.text);
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _selectedLatitude = position.latitude;
+        _selectedLongitude = position.longitude;
+        _locationController.text = buildAutoLocationLabel(_locationController.text);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _locationController.text = buildAutoLocationLabel(_locationController.text);
+      });
+    }
   }
 
   Future<void> _selectLocation() async {
@@ -321,7 +377,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
                           children: [
                             Text(
                               _locationController.text.isEmpty
-                                  ? 'Tap to select location on map'
+                                  ? 'Current location'
                                   : _locationController.text,
                               style: TextStyle(
                                 fontSize: 15,

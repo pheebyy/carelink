@@ -402,7 +402,7 @@ For support, please open an issue on GitHub or contact the development team.
 └── .env                           # Environment variables
 ```
 
-##  Security
+## Security
 
 ### Firestore Security Rules
 The application uses comprehensive Firestore security rules to protect user data:

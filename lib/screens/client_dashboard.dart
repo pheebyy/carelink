@@ -9,18 +9,20 @@ import 'package:carelink/screens/client_payment_screen.dart';
 import 'package:carelink/screens/care_plan_screen.dart';
 import 'package:carelink/services/firestore_service.dart';
 import 'package:carelink/widgets/ux_components.dart';
+import 'package:carelink/app_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class ClientDashboard extends StatefulWidget {
+class ClientDashboard extends ConsumerStatefulWidget {
   const ClientDashboard({super.key});
 
   @override
-  State<ClientDashboard> createState() => _ClientDashboardState();
+  ConsumerState<ClientDashboard> createState() => _ClientDashboardState();
 }
 
-class _ClientDashboardState extends State<ClientDashboard> {
+class _ClientDashboardState extends ConsumerState<ClientDashboard> {
   final _uid = FirebaseAuth.instance.currentUser?.uid;
   final _userName = FirebaseAuth.instance.currentUser?.displayName ?? 'User';
   final _fs = FirestoreService();
@@ -98,12 +100,45 @@ class _ClientDashboardState extends State<ClientDashboard> {
       ),
       centerTitle: false,
       actions: [
+        _buildNotificationBell(),
+      ],
+    );
+  }
+
+  Widget _buildNotificationBell() {
+    final unreadCount = ref.watch(unreadNotificationsCountProvider).value ?? 0;
+    
+    return Stack(
+      children: [
         IconButton(
           icon: Icon(Icons.notifications_outlined, color: Colors.grey.shade800),
-          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Notifications coming soon'), behavior: SnackBarBehavior.floating),
-          ),
+          onPressed: () => Navigator.pushNamed(context, '/notifications'),
         ),
+        if (unreadCount > 0)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 16,
+                minHeight: 16,
+              ),
+              child: Text(
+                '$unreadCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
       ],
     );
   }
