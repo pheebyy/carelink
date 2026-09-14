@@ -436,11 +436,6 @@ class _CaregiverDashboardState extends ConsumerState<CaregiverDashboard> {
     );
   }
 
-  Widget _buildWelcomeHeroCard() {
-    return const SizedBox.shrink();
-  }
-
-
   Widget _buildAiAssistantFab() {
     return FloatingActionButton.extended(
       heroTag: 'ai_fab',

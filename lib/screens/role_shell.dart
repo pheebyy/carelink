@@ -1,3 +1,4 @@
+import 'package:carelink/screens/client_job_management_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:carelink/screens/caregiverdashboard.dart';
 import 'package:carelink/screens/client_dashboard.dart';
@@ -22,8 +23,8 @@ class _RoleShellState extends State<RoleShell> {
 
     // Tabs based on role
     final tabs = [
-      isCaregiver ?  CaregiverDashboard() :  ClientDashboard(),
-      isCaregiver ?  CaregiverJobsScreen() :  ClientJobsScreen(),
+      isCaregiver ?  CaregiverDashboard() :  const ClientDashboard(),
+      isCaregiver ?  const CaregiverJobsScreen() :  const ClientJobManagementScreen(),
       const ConversationsInboxScreen(),
       const _ProfileTab(),
     ];
